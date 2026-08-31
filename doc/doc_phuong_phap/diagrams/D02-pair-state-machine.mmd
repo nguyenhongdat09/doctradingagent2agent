@@ -1,0 +1,58 @@
+%% D02 — Pair state machine FLAT / NORMAL / RECOVERY
+%% Spec refs: 05-capital, 06-state-machine, 07-recovery-loop, 08-parameters
+%% Mermaid stateDiagram-v2: transition labels use short formula tokens
+
+stateDiagram-v2
+  [*] --> FLAT: EA_init_or_no_positions
+
+  state FLAT {
+    [*] --> FlatIdle
+    FlatIdle --> FlatIdle: WAIT_Signal_NONE_or_Matrix_block\nor_KillPause_or_Cooldown_active\nor_GlobalLock_conflict
+  }
+
+  state NORMAL {
+    [*] --> NormManage
+    NormManage --> NormManage: DCA_same_BasketDir\nwhen_adverse_distance_ge_Spacing\nSpacing_eq_max_S_MIN_15_Coef_x_ATR14pips\nCoef_in_1.2_1.5_or_0.7_strong\nLot_eq_L0_plus_k_x_0.05
+  }
+
+  state RECOVERY {
+    [*] --> RecLoop
+    RecLoop --> RecLoop: AdverseSqueeze_DCA_same_dir\nBUY_adv_PUSH_DOWN_ge_0.6__SELL_adv_PUSH_UP\nplus_Spacing_OK_Coef_0.7
+    RecLoop --> RecLoop: FavorableSqueeze_PayoffReduce\nPUSH_favorable_ge_0.6\nPayoffLot_eq_15_to_30pct_TotalLot
+  }
+
+  FLAT --> NORMAL: Matrix_OPEN_BUY_or_OPEN_SELL\nAND_not_KillSwitch\nAND_CooldownOK\nAND_GlobalLockOK\nMARKET_BeginLot_L0_0.05\nBasketDir_set_LadderStep_0
+
+  NORMAL --> FLAT: FavorableSqueeze\nAND_BasketProfit_ge_BasketTpMoney\nBasketTpMoney_eq_f_TP30pips_x_TotalLot\nCLOSE_ALL_reset_Ladder_set_Cooldown
+
+  NORMAL --> RECOVERY: TotalLot_ge_R_TH_0.3\nafter_DCA_or_refresh\nAlert_ENTER_RECOVERY
+
+  RECOVERY --> FLAT: TotalLot_eq_0\nafter_reduce_or_CLOSE_ALL_all_winners\nAlert_EXIT_RECOVERY\nreset_BasketDir_Ladder_Cooldown
+
+  RECOVERY --> RECOVERY: stay_until_flat\neven_if_TotalLot_lt_R_TH\nno_countertrend_open\nno_NORMAL_style_TP\nno_maxDD_stop
+
+  FLAT --> FLAT: desync_guard_TotalLot_eq_0
+  NORMAL --> FLAT: desync_TotalLot_eq_0_unexpected
+  RECOVERY --> FLAT: KillFlatten_CLOSE_ALL_EA
+
+  note right of FLAT
+    Invariant: TotalLot = 0
+    BasketDir = NONE
+    Entry only via Decision Matrix
+    UPTREND x PUSH_DOWN_ge_0.6 -> BUY
+    DOWNTREND x PUSH_UP_ge_0.6 -> SELL
+    SIDEWAY x PUSH_UP_ge_0.6 -> SELL
+    SIDEWAY x PUSH_DOWN_ge_0.6 -> BUY
+  end note
+
+  note right of NORMAL
+    Invariant: 0 < TotalLot < R_TH
+    One direction only
+    Priority per H1: BasketTP then DCA
+  end note
+
+  note right of RECOVERY
+    Invariant: entered when TotalLot >= 0.3
+    Remain until TotalLot = 0
+    Alerts on enter and exit
+  end note

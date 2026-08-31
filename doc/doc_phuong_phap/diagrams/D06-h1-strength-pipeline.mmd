@@ -1,0 +1,28 @@
+%% D06 — H1 strength score pipeline: eyes + brain + rails → matrix
+%% Spec: 03-h1-signal.md
+
+flowchart TD
+  Start([H1_bar_closed]) --> Fetch["H1_OHLC_closed_20_to_30"]
+  Fetch --> Mom["Momentum_0_to_0.4\nbody_ATR_linear_0.5_to_1.5"]
+  Fetch --> Str["Structure_0_to_0.3\nbreak_N_bars_plus_swing_H1"]
+  Fetch --> Loc["Location_0_to_0.2\nvs_D1_swings_and_Context"]
+  Fetch --> Conf["Confirm_0_to_0.1\nclean_close_vs_reject_wick"]
+  Mom --> Sum["strength_score_sum_clamp_0_1"]
+  Str --> Sum
+  Loc --> Sum
+  Conf --> Sum
+  Sum --> DQ{"Disqualifier?\nstreak_ge_4_or_D1_wall_or_news"}
+  DQ -->|Yes| DqCut["score_times_DqMult_or_EXHAUSTION_hint"]
+  DQ -->|No| EyesOut[Eyes_strength_score_plus_components]
+  DqCut --> EyesOut
+  EyesOut --> Brain["BRAIN_LLM_optional\nstrength_final_verdict_narrative"]
+  Ctx["ContextFinal_from_D1_pipeline"] --> Brain
+  Ctx --> Loc
+  Basket["Basket_state"] --> Brain
+  EyesOut --> Rails
+  Brain --> Rails["SAFETY_RAILS\nveto_EXHAUSTION_conf_clamp"]
+  Rails --> Thr{"strength_final_ge_PushEnter_0.6?"}
+  Thr -->|No| Neutral[NEUTRAL_or_WAIT]
+  Thr -->|Yes| Verd{verdict_PUSH_UP_or_DOWN}
+  Verd --> Matrix["Decision_Matrix_with_ContextFinal"]
+  Neutral --> Matrix

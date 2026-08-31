@@ -1,0 +1,43 @@
+%% A01 — Autonomous A2A sequence: wake → plan → ballot → A OrderSend → wake
+%% Spec: 06-entry-flow, 03-consensus-protocol
+
+sequenceDiagram
+  autonumber
+  participant Orch as Orchestrator
+  participant A as AgentA
+  participant HV as HardValidator
+  participant B as AgentB
+  participant MT5 as MT5_Broker
+
+  Orch->>A: Wake_AUTO_or_timer
+  Orch->>B: Wake_AUTO
+  A->>A: Observe_D1_H1_Context_Signal
+  A->>A: Draft_TradePlan_ENTRY_or_WAIT
+  alt action_WAIT
+    A->>Orch: WakeRequest_C1_or_C2
+  else action_ENTRY
+    A->>HV: Validate_plan
+    HV-->>A: HardPass_or_Fail
+    alt HardFail
+      A->>Orch: WakeRequest_DEFER
+    else HardPass
+      A->>B: TradePlan
+      B->>B: Independent_MarketAssessment
+      B->>A: ReviewBallot
+      alt B_CHALLENGE_and_round_lt_2
+        A->>A: Revise_plan
+        A->>HV: Validate_revised
+        A->>B: TradePlan_v2
+        B->>A: ReviewBallot_v2
+      end
+      alt B_APPROVE
+        A->>MT5: OrderSend_MARKET_BeginLot
+        MT5-->>A: Fill
+        A->>Orch: ExecutionReport_CONSENSUS_AUTO
+        A->>Orch: WakeRequest_C3_dynamic
+      else B_REJECT_or_exhausted
+        A->>Orch: WakeRequest_C1_or_C2_DEFER
+      end
+    end
+  end
+  Orch->>Orch: sleep_until_next_wake_at

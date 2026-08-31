@@ -1,0 +1,32 @@
+%% A04 — DCA dual-review loop from order 2+
+%% Spec: 07-dca-dual-review-loop, 08-map-to-phuong-phap
+
+flowchart TD
+  Start([Wake_OPEN_C3_or_Boss]) --> Refresh["A_refresh_TotalLot_BasketDir_PnL_State"]
+  Refresh --> Zero{"TotalLot_eq_0?"}
+  Zero -->|Yes| Flat["PairState_FLAT\nWakeRequest_C1_or_C2"]
+  Zero -->|No| Assess["A_chart_review\nspacing_squeeze_recovery_rules"]
+
+  Assess --> Prop{"proposed_action"}
+  Prop -->|WAIT| BallotWait["Optional_notify_B_or_A_sets_wake_only"]
+  BallotWait --> WakeDyn[A_WakeRequest_C3_dynamic]
+
+  Prop -->|DCA_or_RECOVERY_DCA_or_PAYOFF_or_CLOSE_ALL| Plan["A_publishes_DcaReview_ActionProposal"]
+  Plan --> HV{"HardValidator_PASS?\nspacing_ladder_no_opposite_dir"}
+  HV -->|No| Fix["A_revise_or_WAIT"]
+  Fix --> WakeDyn
+  HV -->|Yes| Brev["B_independent_ballot"]
+
+  Brev --> Dec{"B_decision"}
+  Dec -->|CHALLENGE_round_lt_2| Rev["A_revise_review"]
+  Rev --> HV
+  Dec -->|APPROVE| Exec["A_OrderSend_or_close_partial"]
+  Dec -->|REJECT_or_exhausted| Defer["DEFER_no_exec"]
+
+  Exec --> Post["Update_TotalLot_State\nRECOVERY_if_ge_R_TH_0.3"]
+  Post --> Zero2{"TotalLot_eq_0?"}
+  Zero2 -->|Yes| Flat
+  Zero2 -->|No| WakeDyn
+  Defer --> WakeDyn
+  WakeDyn --> EndNode([Sleep_until_next_wake])
+  Flat --> EndNode

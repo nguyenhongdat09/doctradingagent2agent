@@ -1,0 +1,49 @@
+%% A02 — Consensus / session state machine
+%% Spec: 03-consensus-protocol, 11-boss-interrupt-flow
+
+stateDiagram-v2
+  [*] --> SLEEPING
+
+  SLEEPING --> AUTO_CYCLE: timer_next_wake_at
+  SLEEPING --> BOSS_SESSION: BossWake_interrupt
+  AUTO_CYCLE --> BOSS_SESSION: BossWake_mid_cycle
+
+  state AUTO_CYCLE {
+    [*] --> Observing
+    Observing --> Planning: A_drafts_plan
+    Planning --> Validating: HardValidator
+    Validating --> Planning: HardFail_revise_or_WAIT
+    Validating --> Balloting: HardPass
+    Balloting --> Challenging: B_CHALLENGE_round_lt_2
+    Challenging --> Planning: A_revise
+    Balloting --> Executing_A: B_APPROVE
+    Balloting --> Deferring: B_REJECT_or_rounds_exhausted
+    Executing_A --> Scheduling: OrderSend_done
+    Deferring --> Scheduling: WakeRequest_C1_C2_C3
+    Scheduling --> [*]
+  }
+
+  state BOSS_SESSION {
+    [*] --> BossContext
+    BossContext --> PlanningB: A_reads_Boss_intent
+    PlanningB --> ValidatingB: HardValidator
+    ValidatingB --> BallotingB: HardPass
+    BallotingB --> BossChat: debate_A_B_Boss
+    BossChat --> PlanningB: revise_lt_Max
+    BossChat --> AwaitBossACK: plan_stable
+    AwaitBossACK --> ExecutingBoss: BossACK_and_B_APPROVE
+    AwaitBossACK --> ExecutingOverride: BossACK_and_BossOverride
+    AwaitBossACK --> DeferBoss: BossACK_missing_or_no_override_on_dissent
+    ExecutingBoss --> ExitBoss: CONSENSUS_WITH_BOSS
+    ExecutingOverride --> ExitBoss: BOSS_OVERRIDE_EXEC
+    DeferBoss --> ExitBoss: WakeRequest_C1_C2_C3
+    ExitBoss --> [*]
+  }
+
+  AUTO_CYCLE --> SLEEPING: cycle_end
+  BOSS_SESSION --> SLEEPING: session_mode_back_AUTO
+
+  note right of SLEEPING
+    next_wake_at from Agent A
+    BossWake cancels sleep
+  end note

@@ -1,0 +1,21 @@
+%% A06 — D1 context pipeline for agents: eyes vs brain
+%% Spec: 12-market-data-fetch.md, doc_phuong_phap/02-d1-context.md
+
+flowchart TD
+  Wake([Agent_Wake]) --> FetchD1["Agent_calls_fetch_bars_D1_30_closed"]
+  FetchD1 --> Eyes["EYES_get_structure_features\nEA_deterministic_swings_radius_3\nmax_6_no_LLM_invent"]
+  Eyes --> EnoughD1{"coverage_OK_and_swings_usable?"}
+  EnoughD1 -->|No| MoreD1["fetch_more_D1_reason_structure\nrounds_lt_MaxFetchRounds"]
+  MoreD1 --> Eyes
+  EnoughD1 -->|Yes| Brain["BRAIN_LLM_interpret\nnarrative_confidence_context_d1"]
+  FetchD1 --> Brain
+  Basket["Basket_state_in_snapshot"] --> Brain
+  Brain --> Rails["SAFETY_RAILS_clamp\nveto_or_low_conf_keep_PrevContext"]
+  Eyes --> Rails
+  Rails --> Ctx[ContextFinal]
+  Ctx --> FetchH1["fetch_bars_H1_20_to_30_plus_ATR14_H1"]
+  FetchH1 --> EnoughH1{"enough_for_signal_and_review?"}
+  EnoughH1 -->|No| MoreH1["fetch_more_H1"]
+  MoreH1 --> EnoughH1
+  EnoughH1 -->|Yes| Analyze["Plan_or_Ballot\nmatrix_uses_ContextFinal"]
+  Analyze --> Out([TradePlan_or_ReviewBallot])

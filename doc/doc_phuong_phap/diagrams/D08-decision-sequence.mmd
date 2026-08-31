@@ -1,0 +1,49 @@
+%% D08-decision-sequence.mmd
+%% Sequence diagram: Vòng đời quyết định (H1 close -> Snapshot -> A/B -> HardValidator -> SQLite Queue -> Executor -> MT5)
+sequenceDiagram
+    autonumber
+    participant S as Scheduler / Timer
+    participant E as Eye Engine (Python)
+    participant A as Agent A (Planner)
+    participant B as Agent B (Challenger)
+    participant V as HardValidator (Rails)
+    participant DB as SQLite (MarketOrderInfo)
+    participant EX as Executor Thread
+    participant MT5 as MetaTrader 5
+
+    S->>E: Sự kiện nến H1 đóng (H1 Bar Close Event)
+    E->>MT5: Lấy vị thế thực tế (Positions, Balance, Equity)
+    MT5-->>E: Trả về trạng thái tài khoản & vị thế mở
+    E->>E: Tính Swing D1, BOS, ATR, H1 Strength Score & DQ
+    E->>A: Snapshot thị trường + Trạng thái Basket hiện tại
+    
+    Note over A: Phân tích bối cảnh D1 & Tín hiệu H1
+    A->>A: Soạn thảo TradePlan (Action, Lot, Spacing, TP)
+    A->>B: Gửi TradePlan yêu cầu thẩm định
+    
+    Note over B: Đánh giá độc lập & Tìm phản chứng
+    B->>B: Kiểm tra Anti-sycophancy (Similarity <= 0.85)
+    B-->>A: Trả về ReviewBallot (APPROVE + Counter-Evidence)
+    
+    A->>V: Trình ActionProposal + Ballots
+    Note over V: Kiểm tra 5 tiêu chí Safety Rails
+    alt HardValidator PASS
+        V->>DB: INSERT INTO MarketOrderInfo (status='PENDING')
+        V->>DB: Ghi AuditLog & Session Logs
+        
+        loop Executor Polling
+            EX->>DB: UPDATE MarketOrderInfo SET status='PROCESSING' (Atomic Claim)
+            DB-->>EX: Khóa thành công 1 bản ghi
+            EX->>MT5: Thực thi OrderSend() / OrderClose()
+            MT5-->>EX: Trả về kết quả khớp lệnh (Ticket, ExecutedPrice)
+            EX->>DB: BEGIN TRANSACTION
+            EX->>DB: INSERT INTO MarketOrderInfoArchive
+            EX->>DB: DELETE FROM MarketOrderInfo WHERE id = ?
+            EX->>DB: UPDATE PairState (total_lot, state, ladder_step)
+            EX->>DB: COMMIT TRANSACTION
+        end
+    else HardValidator FAIL
+        V->>DB: Ghi AuditLog (REJECTED_BY_RAILS)
+    end
+    
+    A->>S: Thiết lập lịch Wake-up tiếp theo (Next H1 Close hoặc Intra-bar)

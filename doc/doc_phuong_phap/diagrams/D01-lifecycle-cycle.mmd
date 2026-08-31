@@ -1,0 +1,83 @@
+%% D01 — Lifecycle cycle per H1 close (Trading Agent DCA MT5)
+%% Spec refs: 01-overview, 02-context, 03-signal, 04-matrix, 05-capital, 06-state
+%% Conventions: no spaces in node IDs; labels with () or : wrapped in quotes
+
+flowchart TD
+  Start([OnTick_or_OnTimer]) --> KillGate{"KillSwitch_or_KillFlatten?"}
+  KillGate -->|"KillFlatten"| FlattenAll["CLOSE_ALL_EA_positions -> all_FLAT"]
+  KillGate -->|"Pause_only"| PauseNote["Skip_new_opens_continue_manage_optional"]
+  KillGate -->|"No"| SymLoop["For_each_Symbol_AUDCAD_AUDNZD_GBPUSD_NZDCAD"]
+
+  SymLoop --> NewH1{"NewBar_H1?\niTime_H1_0_changed"}
+  NewH1 -->|No| EndTick([End_cycle_symbol])
+  NewH1 -->|Yes| ReadBars["Read_closed_bars_only\nH1_shift1_and_D1_shift1"]
+
+  ReadBars --> CtxEng["StructureEngine_D1\nswings_radius_3_features_BOS"]
+  CtxEng --> CtxRule["RuleClassify_HH_HL_or_LH_LL_or_SIDEWAY"]
+  CtxRule --> CtxHyst{"Hysteresis_confirm_change?\ntwo_swings_or_strong_BOS"}
+  CtxHyst -->|No| CtxKeep[Context_PrevContext]
+  CtxHyst -->|Yes| CtxCand[Context_candidate]
+  CtxKeep --> CtxRails
+  CtxCand --> CtxRails["SAFETY_RAILS_plus_optional_LLM_clamp"]
+  CtxRails --> CtxOut[ContextFinal]
+  CtxOut --> SigEng
+
+  SigEng["H1_StrengthScore_Eyes\nmom_0.4_str_0.3_loc_0.2_conf_0.1_plus_DQ"] --> SigRails["SAFETY_RAILS_optional_LLM\nstrength_final_verdict"]
+  SigRails --> PushQ{"strength_final_ge_0.6?"}
+  PushQ -->|No| HasNone[Signal_NEUTRAL_or_weak]
+  PushQ -->|Yes| Verd{verdict?}
+  Verd -->|PUSH_UP| HasUp[Signal_PUSH_UP]
+  Verd -->|PUSH_DOWN| HasDn[Signal_PUSH_DOWN]
+  Verd -->|EXHAUSTION_or_NEUTRAL| HasNone
+  HasNone --> StateBr
+  HasUp --> StateBr
+  HasDn --> StateBr
+
+  StateBr{"Pair_State?"} -->|FLAT| FlatPath
+  StateBr -->|NORMAL| NormPath
+  StateBr -->|RECOVERY| RecPath
+
+  FlatPath["FLAT_path"] --> Matrix{"DecisionMatrix_Context_x_Push"}
+  Matrix -->|"UPTREND_x_PUSH_DOWN"| ActBuy[Action_OPEN_BUY]
+  Matrix -->|"DOWNTREND_x_PUSH_UP"| ActSell[Action_OPEN_SELL]
+  Matrix -->|"SIDEWAY_x_PUSH_UP"| ActSell2[Action_OPEN_SELL]
+  Matrix -->|"SIDEWAY_x_PUSH_DOWN"| ActBuy2[Action_OPEN_BUY]
+  Matrix -->|"Else_WAIT"| ActWait[Action_WAIT]
+  ActBuy --> FlatGates
+  ActSell --> FlatGates
+  ActBuy2 --> FlatGates
+  ActSell2 --> FlatGates
+  ActWait --> UpdateState
+  FlatGates{"CooldownOK_AND_GlobalLockOK_AND_MarginOK?"} -->|Yes| OpenBegin["MARKET_BeginLot_L0_0.05\nBasketDir_set_State_NORMAL"]
+  FlatGates -->|No| UpdateState
+  OpenBegin --> UpdateState
+
+  NormPath["NORMAL_TotalLot_lt_R_TH"] --> NormRefresh{"Refresh_TotalLot"}
+  NormRefresh -->|"TotalLot_eq_0"| ToFlat1[State_FLAT_desync]
+  NormRefresh -->|"TotalLot_ge_R_TH_0.3"| ToRec1["State_RECOVERY_alert_ENTER"]
+  NormRefresh -->|"still_NORMAL"| NormTP{"FavorableSqueeze_AND_BasketProfit_ge_TpMoney?\nTpMoney_eq_f_TP_Pips_x_TotalLot"}
+  NormTP -->|Yes| CloseAll["CLOSE_ALL -> State_FLAT_set_Cooldown"]
+  NormTP -->|No| NormDca{"Adverse_price_ge_Spacing?\nBUY_Bid_le_AdvRef_minus_Sp\nSELL_Ask_ge_AdvRef_plus_Sp\nSp_eq_max_S_MIN_Coef_x_ATR_pips"}
+  NormDca -->|Yes| DoDca["DCA_same_dir_Lot_LadderStep_plus_1"]
+  NormDca -->|No| UpdateState
+  DoDca --> AfterDca{"TotalLot_ge_R_TH?"}
+  AfterDca -->|Yes| ToRec2["State_RECOVERY_alert_ENTER"]
+  AfterDca -->|No| UpdateState
+  ToFlat1 --> UpdateState
+  ToRec1 --> UpdateState
+  CloseAll --> UpdateState
+  ToRec2 --> UpdateState
+
+  RecPath["RECOVERY_loop_see_D03"] --> RecCall["Run_RecoveryActivity\nAdverse_DCA_or_Favorable_PayoffReduce"]
+  RecCall --> RecZero{"TotalLot_eq_0?"}
+  RecZero -->|Yes| ToFlat2["State_FLAT_alert_EXIT_RECOVERY"]
+  RecZero -->|No| StayRec[Remain_RECOVERY]
+  ToFlat2 --> UpdateState
+  StayRec --> UpdateState
+
+  UpdateState["Persist_PrevContext_State_AdverseRef_LadderStep"] --> EndTick
+  FlattenAll --> EndAll([End_tick])
+  PauseNote --> SymLoop
+  EndTick --> MoreSym{"More_symbols?"}
+  MoreSym -->|Yes| SymLoop
+  MoreSym -->|No| EndAll

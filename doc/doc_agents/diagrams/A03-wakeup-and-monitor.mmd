@@ -1,0 +1,27 @@
+%% A03 — Wakeup and monitor flowchart
+%% Spec: 05-scheduler-wakeup
+
+flowchart TD
+  Start([Orchestrator_loop]) --> Wait{"Wait_for_event"}
+  Wait -->|"timer_next_wake_at"| AutoWake[session_mode_AUTO]
+  Wait -->|"BossWake"| BossInt["session_mode_BOSS\ncancel_sleep_wake_A_and_B"]
+  Wait -->|"KillSwitch"| Kill[Emergency_path]
+
+  AutoWake --> RunCycle[Run_consensus_cycle]
+  BossInt --> RunCycle
+  Kill --> EndKill([Handle_flatten_or_pause])
+
+  RunCycle --> After{"PairState_after_cycle?"}
+  After -->|FLAT| FlatH1{"ElapsedInH1_ge_30m?"}
+  FlatH1 -->|Yes_C1| WakeC1["WakeRequest_now_plus_30m_REQUIRED"]
+  FlatH1 -->|No_C2| WakeC2["WakeRequest_H1_open_plus_30m"]
+
+  After -->|NORMAL_or_RECOVERY| Dyn["AgentA_chooses_dynamic_interval\nclamp_WakeMin_3m_WakeMax_60m\nbased_on_volatility_PnL_spacing_H1_close"]
+  Dyn --> WakeC3[WakeRequest_C3]
+
+  WakeC1 --> Sleep[sleep_until_next_wake_at]
+  WakeC2 --> Sleep
+  WakeC3 --> Sleep
+  Sleep --> Wait
+
+  BossInt -.->|"priority_over_timer"| Wait

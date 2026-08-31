@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hệ Thống Giao Dịch A2A - Studio Biểu Đồ & Đặc Tả Nghiệp Vụ (BA)</title>
+  
+  <!-- Phông chữ Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  
+  <!-- Thư viện Mermaid.js & SVG Pan Zoom -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #121826;
+      --bg-card: rgba(18, 24, 38, 0.85);
+      --bg-editor: #0d111a;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #3b82f6;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --glow-blue: rgba(59, 130, 246, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                  radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+                  var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Thanh điều hướng Header */
+    header {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.85rem 1.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: white;
+      box-shadow: 0 4px 14px var(--glow-blue);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.5rem 0.95rem;
+      font-size: 0.825rem;
+      font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-primary);
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+      border: none;
+      box-shadow: 0 2px 8px var(--glow-blue);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #60a5fa, var(--accent-blue));
+    }
+
+    /* Thanh chọn Tab biểu đồ */
+    .tabs-nav {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      background: rgba(18, 24, 38, 0.5);
+      border-bottom: 1px solid var(--border-color);
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tab-btn.active {
+      color: #ffffff;
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+      font-weight: 600;
+    }
+
+    /* Bố cục chính */
+    .main-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      height: calc(100vh - 120px);
+      position: relative;
+    }
+
+    /* Cột chỉnh sửa mã nguồn bên trái */
+    .editor-pane {
+      background: var(--bg-editor);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .pane-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .pane-title {
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .editor-textarea {
+      flex: 1;
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.825rem;
+      line-height: 1.55;
+      padding: 1rem;
+      resize: none;
+      outline: none;
+      tab-size: 2;
+    }
+
+    /* Khung vẽ biểu đồ trực quan bên phải */
+    .preview-pane {
+      display: flex;
+      flex-direction: column;
+      background: #0b0f19;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .canvas-toolbar {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      display: flex;
+      gap: 0.4rem;
+      z-index: 10;
+      background: rgba(18, 24, 38, 0.9);
+      backdrop-filter: blur(12px);
+      padding: 0.35rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .tool-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.15s ease;
+    }
+
+    .tool-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+    }
+
+    .diagram-viewport {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 2rem;
+      cursor: grab;
+      position: relative;
+    }
+
+    .diagram-viewport:active {
+      cursor: grabbing;
+    }
+
+    #diagram-output {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #diagram-output svg {
+      max-width: 100%;
+      max-height: 100%;
+      transition: transform 0.1s ease-out;
+    }
+
+    /* Thông báo lỗi cú pháp */
+    .error-banner {
+      display: none;
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      right: 1rem;
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid var(--accent-rose);
+      color: #fecdd3;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.825rem;
+      font-family: 'JetBrains Mono', monospace;
+      z-index: 20;
+    }
+
+    /* Thông báo Toast */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: #1e293b;
+      color: white;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      font-size: 0.85rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Thanh điều hướng Header -->
+  <header>
+    <div class="brand-group">
+      <div class="logo-badge">📊</div>
+      <div>
+        <div class="brand-title">A2A Trading Studio</div>
+        <div class="brand-subtitle">Bộ Đặc Tả Nghiệp Vụ & Biểu Đồ Dành Cho BA</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="btn-copy-code" title="Sao chép mã Mermaid vào bộ nhớ tạm">
+        📋 Sao chép Mermaid
+      </button>
+      <button class="btn" id="btn-export-svg" title="Xuất biểu đồ ra tệp vector SVG">
+        🖼️ Xuất file SVG
+      </button>
+      <button class="btn btn-primary" id="btn-export-png" title="Xuất biểu đồ ra tệp ảnh PNG chất lượng cao">
+        📥 Xuất ảnh PNG
+      </button>
+    </div>
+  </header>
+
+  <!-- Thanh chọn Tab biểu đồ -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="sequence">
+      🔄 1. Biểu đồ tuần tự (Sequence Diagram)
+    </button>
+    <button class="tab-btn" data-tab="architecture">
+      🏗️ 2. Kiến trúc & Hàng đợi dữ liệu
+    </button>
+    <button class="tab-btn" data-tab="order_state">
+      🚦 3. Vòng đời trạng thái lệnh (State Machine)
+    </button>
+    <button class="tab-btn" data-tab="risk_rules">
+      🛡️ 4. Cây quyết định kiểm soát rủi ro
+    </button>
+  </nav>
+
+  <!-- Khung làm việc chính -->
+  <main class="main-layout">
+    <!-- Cột chỉnh sửa mã nguồn bên trái -->
+    <section class="editor-pane">
+      <div class="pane-header">
+        <span class="pane-title">Mã Nguồn Biểu Đồ (Mermaid)</span>
+        <button class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" id="btn-reset">
+          🔄 Đặt Lại Mặc Định
+        </button>
+      </div>
+      <textarea id="editor-input" class="editor-textarea" spellcheck="false"></textarea>
+    </section>
+
+    <!-- Khung vẽ trực quan bên phải -->
+    <section class="preview-pane">
+      <div class="canvas-toolbar">
+        <button class="tool-btn" id="btn-zoom-in" title="Phóng to (+)">🔍+</button>
+        <button class="tool-btn" id="btn-zoom-out" title="Thu nhỏ (-)">🔍-</button>
+        <button class="tool-btn" id="btn-zoom-reset" title="Đặt lại tỷ lệ & căn giữa">🎯</button>
+        <button class="tool-btn" id="btn-fullscreen" title="Xem toàn màn hình">⛶</button>
+      </div>
+
+      <div class="diagram-viewport" id="viewport">
+        <div id="diagram-output"></div>
+      </div>
+
+      <div id="error-banner" class="error-banner"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast">Đã sao chép vào bộ nhớ tạm!</div>
+
+  <script>
+    // Dữ liệu mẫu biểu đồ 100% Tiếng Việt dành cho Business Analyst
+    const DIAGRAM_PRESETS = {
+      sequence: `sequenceDiagram
+    autonumber
+    actor NguonGia as Nguồn Dữ Liệu Thị Trường
+    participant MDA as Market Data Agent (Dữ liệu)
+    participant SA as Strategy Agent (Chiến lược)
+    participant RA as Risk Agent (Kiểm soát rủi ro)
+    participant EA as Execution Agent (Thực thi lệnh)
+    participant San as Sàn Giao Dịch / Broker API
+
+    %% 1. Luồng dữ liệu thị trường
+    NguonGia->>MDA: Nhận giá & nến thời gian thực (BTC/USDT @ $65,000, KL: 1.5)
+    activate MDA
+    MDA->>SA: Phát sự kiện dữ liệu (MarketDataEvent)
+    deactivate MDA
+
+    %% 2. Phân tích chiến lược & Tạo tín hiệu
+    activate SA
+    SA->>SA: Tính toán chỉ báo kỹ thuật (SMA Ngắn cắt lên SMA Dài)
+    SA->>RA: Gửi đề xuất giao dịch (SignalEvent: MUA 0.5 BTC)
+    deactivate SA
+
+    %% 3. Thẩm định & Kiểm soát rủi ro
+    activate RA
+    RA->>RA: Kiểm tra hạn mức rủi ro (Vị thế tối đa & Hạn mức vốn USD)
+    
+    alt Thỏa mãn điều kiện rủi ro (Chấp thuận)
+        RA->>EA: Phát lệnh đã phê duyệt (OrderEvent: MUA 0.5 BTC)
+        deactivate RA
+
+        %% 4. Thực thi lệnh
+        activate EA
+        EA->>San: Gửi yêu cầu đặt lệnh (POST /api/v1/order)
+        activate San
+        San-->>EA: Xác nhận nhận lệnh (Mã lệnh: #76cefc, Chờ khớp)
+        San-->>EA: Báo cáo khớp lệnh (ĐÃ KHỚP @ $65,013.20, Phí: $33.01)
+        deactivate San
+
+        %% 5. Cập nhật trạng thái & Xác nhận hoàn tất
+        EA->>RA: Cập nhật sổ cái vị thế (FillEvent)
+        EA->>SA: Thông báo lệnh đã khớp thành công (FillEvent)
+        deactivate EA
+
+    else Vi phạm hạn mức rủi ro (Từ chối)
+        activate RA
+        RA-->>SA: Từ chối đề xuất (Lý do: "Vượt quá khối lượng vị thế tối đa")
+        deactivate RA
+    end`,
+
+      architecture: `flowchart LR
+    subgraph LopDuLieu ["1. Tầng Thu Thập Dữ Liệu"]
+        NguonGia["Nguồn Cung Cấp Giá Ngoài"] --> MDA["Market Data Agent (MDA)\n- Nhận WebSocket / REST\n- Chuẩn hóa dữ liệu nến & tick"]
+    end
+
+    subgraph TrucSuKien ["Trục Giao Tiếp Sự Kiện Trung Tâm"]
+        Bus[("Trục Bus Sự Kiện Bất Đồng Bộ\n(Hàng đợi Pub/Sub Async)")]
+    end
+
+    subgraph LopPhanTich ["2. Tầng Chiến Lược & Quản Trị Rủi Ro"]
+        SA["Strategy Agent (SA)\n- Phân tích kỹ thuật (SMA/RSI)\n- Tín hiệu mô hình AI / LLM"]
+        RA["Risk Agent (RA)\n- Kiểm tra vị thế tối đa\n- Hạn mức phân bổ vốn\n- Chốt chặn Drawdown ngày"]
+    end
+
+    subgraph LopThucThi ["3. Tầng Đặt Lệnh & Sàn Giao Dịch"]
+        EA["Execution Agent (EA)\n- Định tuyến lệnh thông minh\n- Kiểm soát trượt giá"]
+        San["Sàn Giao Dịch / Broker API\n- Khớp lệnh (Matching Engine)\n- Quản lý tài khoản & Số dư"]
+    end
+
+    %% Kết nối luồng dữ liệu
+    MDA -->|MarketDataEvent: Dữ liệu thị trường| Bus
+    Bus -->|MarketDataEvent| SA
+    SA -->|SignalEvent: Đề xuất tín hiệu| Bus
+    Bus -->|SignalEvent| RA
+    RA -->|OrderEvent: Lệnh đã duyệt| Bus
+    Bus -->|OrderEvent| EA
+    EA -->|Gửi lệnh REST / WebSocket| San
+    San -->|Báo cáo khớp lệnh| EA
+    EA -->|FillEvent: Khớp thành công| Bus
+    Bus -->|FillEvent: Cập nhật trạng thái| RA
+    Bus -->|FillEvent: Cập nhật vị thế| SA`,
+
+      order_state: `stateDiagram-v2
+    [*] --> DE_XUAT : Strategy Agent phát tín hiệu (SignalEvent)
+    
+    state ThamDinhRuiRo {
+        DE_XUAT --> DANG_KIEM_TRA : Risk Agent tiếp nhận kiểm tra
+        DANG_KIEM_TRA --> BI_TU_CHOI : Vi phạm hạn mức rủi ro
+        DANG_KIEM_TRA --> DA_PHE_DUYET : Đạt tiêu chuẩn an toàn vốn
+    }
+
+    BI_TU_CHOI --> [*] : Gửi thông báo từ chối về Strategy Agent
+    
+    state ChuTrinhThucThi {
+        DA_PHE_DUYET --> DANG_DINH_TUYEN : Execution Agent tiếp nhận lệnh duyệt
+        DANG_DINH_TUYEN --> CHO_KHOP_LENH : Đã gửi lệnh lên Sàn giao dịch
+        CHO_KHOP_LENH --> DA_KHOP_TOAN_BO : Sàn xác nhận khớp thành công
+        CHO_KHOP_LENH --> DA_HUY_LENH : Hết hạn / Sàn từ chối
+    }
+
+    DA_KHOP_TOAN_BO --> CAP_NHAT_VI_THE : Cập nhật sổ cái cho Risk và Strategy
+    CAP_NHAT_VI_THE --> [*]
+    DA_HUY_LENH --> [*]`,
+
+      risk_rules: `flowchart TD
+    BatDau([Nhận Đề Xuất Giao Dịch SignalEvent]) --> KiemTra1{Khối lượng 1 lệnh <= Mức tối đa cho phép?}
+    
+    KiemTra1 -- Không --> TuChoi1[❌ Từ chối: 'Khối lượng 1 lệnh quá lớn']
+    KiemTra1 -- Có --> KiemTra2{Tổng vị thế sau lệnh <= Hạn mức tối đa?}
+    
+    KiemTra2 -- Không --> TuChoi2[❌ Từ chối: 'Vượt quá quy mô vị thế tối đa']
+    KiemTra2 -- Có --> KiemTra3{Giá trị USD danh mục <= Hạn mức phân bổ vốn?}
+    
+    KiemTra3 -- Không --> TuChoi3[❌ Từ chối: 'Vượt trần hạn mức vốn USD']
+    KiemTra3 -- Có --> KiemTra4{Mức sụt giảm trong ngày <= Ngưỡng Max Drawdown?}
+    
+    KiemTra4 -- Không --> TuChoi4[❌ Từ chối: 'Đã chạm ngưỡng Drawdown ngày']
+    KiemTra4 -- Có --> PheDuyet[✅ DUYỆT LỆNH: Tạo OrderEvent chuyển sang Execution Agent]
+
+    TuChoi1 --> BaoCaoLoi[Phát sự kiện RiskRejectEvent -> Strategy Agent]
+    TuChoi2 --> BaoCaoLoi
+    TuChoi3 --> BaoCaoLoi
+    TuChoi4 --> BaoCaoLoi`
+    };
+
+    // Biến trạng thái
+    let currentTab = 'sequence';
+    let panZoomInstance = null;
+
+    // Cấu hình Mermaid
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      fontFamily: 'Inter, sans-serif',
+      themeVariables: {
+        darkMode: true,
+        background: '#0b0f19',
+        primaryColor: '#1e3a8a',
+        primaryTextColor: '#f8fafc',
+        primaryBorderColor: '#3b82f6',
+        lineColor: '#60a5fa',
+        secondaryColor: '#312e81',
+        tertiaryColor: '#1e293b'
+      }
+    });
+
+    const editor = document.getElementById('editor-input');
+    const output = document.getElementById('diagram-output');
+    const errorBanner = document.getElementById('error-banner');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    async function renderDiagram() {
+      const code = editor.value;
+      errorBanner.style.display = 'none';
+
+      try {
+        if (panZoomInstance) {
+          panZoomInstance.destroy();
+          panZoomInstance = null;
+        }
+
+        const id = 'mermaid-svg-' + Date.now();
+        const { svg } = await mermaid.render(id, code);
+        output.innerHTML = svg;
+
+        const svgElement = output.querySelector('svg');
+        if (svgElement) {
+          svgElement.style.width = '100%';
+          svgElement.style.height = '100%';
+          
+          panZoomInstance = svgPanZoom(svgElement, {
+            zoomEnabled: true,
+            controlIconsEnabled: false,
+            fit: true,
+            center: true,
+            minZoom: 0.3,
+            maxZoom: 5
+          });
+        }
+      } catch (err) {
+        errorBanner.style.display = 'block';
+        errorBanner.textContent = 'Lỗi cú pháp Mermaid: ' + (err.message || err);
+      }
+    }
+
+    function loadTab(tabName) {
+      currentTab = tabName;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      });
+      editor.value = DIAGRAM_PRESETS[tabName];
+      renderDiagram();
+    }
+
+    // Gán sự kiện
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => loadTab(btn.dataset.tab));
+    });
+
+    let debounceTimer;
+    editor.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(renderDiagram, 300);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      editor.value = DIAGRAM_PRESETS[currentTab];
+      renderDiagram();
+      showToast('🔄 Đã khôi phục biểu đồ mặc định!');
+    });
+
+    // Điều khiển Zoom & Pan
+    document.getElementById('btn-zoom-in').addEventListener('click', () => {
+      if (panZoomInstance) panZoomInstance.zoomIn();
+    });
+    document.getElementById('btn-zoom-out').addEventListener('click', () => {
+      if (panZoomInstance) panZoomInstance.zoomOut();
+    });
+    document.getElementById('btn-zoom-reset').addEventListener('click', () => {
+      if (panZoomInstance) {
+        panZoomInstance.resetZoom();
+        panZoomInstance.center();
+      }
+    });
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      const elem = document.querySelector('.preview-pane');
+      if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => alert(err.message));
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // Sao chép mã nguồn
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+      navigator.clipboard.writeText(editor.value).then(() => {
+        showToast('📋 Đã sao chép mã Mermaid vào bộ nhớ tạm!');
+      });
+    });
+
+    // Xuất tệp SVG
+    document.getElementById('btn-export-svg').addEventListener('click', () => {
+      const svg = output.querySelector('svg');
+      if (!svg) return;
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `BieuDo_A2A_${currentTab}.svg`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast('🖼️ Đã xuất tệp SVG thành công!');
+    });
+
+    // Xuất tệp PNG
+    document.getElementById('btn-export-png').addEventListener('click', () => {
+      const svg = output.querySelector('svg');
+      if (!svg) return;
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        canvas.width = img.width * 2 || 2400;
+        canvas.height = img.height * 2 || 1600;
+        ctx.fillStyle = '#0b0f19';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pngUrl;
+        downloadLink.download = `BieuDo_A2A_${currentTab}.png`;
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+        showToast('📥 Đã xuất tệp ảnh PNG chất lượng cao!');
+      };
+      img.src = url;
+    });
+
+    // Khởi tạo hiển thị
+    window.addEventListener('DOMContentLoaded', () => loadTab('sequence'));
+  </script>
+</body>
+</html>

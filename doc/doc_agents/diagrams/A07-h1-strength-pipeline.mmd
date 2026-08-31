@@ -1,0 +1,19 @@
+%% A07 — H1 strength pipeline for agents
+%% Spec: 12-market-data-fetch, doc_phuong_phap/03-h1-signal
+
+flowchart TD
+  Wake([After_D1_ContextFinal]) --> FetchH1["fetch_bars_H1_20_to_30"]
+  FetchH1 --> Eyes["get_h1_strength_score\nmom_str_loc_conf_plus_DQ"]
+  Eyes --> Border{"score_borderline_0.4_to_0.6_or_unclear?"}
+  Border -->|Yes| More["fetch_more_H1_reason_score"]
+  More --> Eyes
+  Border -->|No| Brain["LLM_strength_final_verdict_narrative"]
+  Eyes --> Brain
+  Ctx["ContextFinal"] --> Brain
+  Basket["Basket_state"] --> Brain
+  Brain --> Rails["SAFETY_RAILS_veto_EXHAUSTION"]
+  Rails --> Thr{"strength_final_ge_0.6?"}
+  Thr -->|No| Wait[WAIT_or_NEUTRAL]
+  Thr -->|Yes| Matrix["Decision_Matrix_with_Context"]
+  Wait --> Out([Plan_or_Ballot])
+  Matrix --> Out

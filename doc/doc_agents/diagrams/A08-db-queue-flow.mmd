@@ -1,0 +1,34 @@
+%% A08-db-queue-flow.mmd
+%% Luồng trạng thái MarketOrderInfo: PENDING -> PROCESSING -> ARCHIVED_DONE / FAILED / CANCELLED
+stateDiagram-v2
+    [*] --> PENDING : HardValidator PASS\n(Agent A/B Consensus ghi bản ghi)
+
+    PENDING --> PROCESSING : Executor Thread khóa bản ghi (Atomic UPDATE status='PROCESSING')
+    
+    state PROCESSING {
+        [*] --> SendingToMT5 : Gọi API mt5.order_send()
+        SendingToMT5 --> MT5_Success : Trả về Ticket hợp lệ (Retcode 10009)
+        SendingToMT5 --> MT5_Retry : Mất kết nối / Timeout (Thử lại tối đa 3 lần)
+        MT5_Retry --> SendingToMT5 : Còn lượt retry
+        MT5_Retry --> MT5_Fail : Hết lượt retry / Broker từ chối
+    }
+
+    PROCESSING --> ARCHIVED_DONE : MT5_Success\n[Bắt đầu DB Transaction]
+    state ARCHIVED_DONE {
+        [*] --> CopyToArchive : Ghi vào MarketOrderInfoArchive
+        CopyToArchive --> DeleteQueue : XÓA dòng khỏi MarketOrderInfo
+        DeleteQueue --> UpdateState : Cập nhật PairState & AuditLog
+        UpdateState --> [*] : COMMIT TRANSACTION
+    }
+
+    PROCESSING --> FAILED : MT5_Fail (Lỗi Margin, Giá lệch, Lỗi mạng)
+    state FAILED {
+        [*] --> LogError : Cập nhật status='FAILED', ghi error message
+        LogError --> AlertBoss : Gửi cảnh báo lỗi hệ thống
+    }
+
+    PENDING --> CANCELLED : Kill-Switch kích hoạt / Nến mới làm mất hiệu lực plan
+
+    ARCHIVED_DONE --> [*] : Hoàn tất chu kỳ
+    FAILED --> [*] : Dừng chờ can thiệp
+    CANCELLED --> [*] : Hủy bỏ an toàn

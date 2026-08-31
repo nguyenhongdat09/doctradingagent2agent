@@ -1,0 +1,31 @@
+%% D05 — D1 context pipeline: eyes (deterministic swings) + brain (LLM) + SAFETY RAILS
+%% Spec: 02-d1-context.md
+
+flowchart TD
+  Start([H1_closed_trigger]) --> FetchD1["Load_D1_OHLC_closed_only\nsnapshot_30_bars_newest"]
+  FetchD1 --> Eyes["EYES_StructureEngine_deterministic\nPivot_High_Low_radius_3\nconfirm_after_3_bars_after\nmax_6_swings"]
+  Eyes --> Feat["Features\nHH_HL_LH_LL\nlast_BOS_up_or_down\nrange_compress_vs_ATR14_D1\nprice_vs_pivots"]
+  Feat --> Rule["RuleClassify_priority\nUPTREND_HH_plus_HL_no_downBOS\nDOWNTREND_LH_plus_LL_no_upBOS\nelse_SIDEWAY_or_compress_le_X"]
+  Rule --> Hyst{"Hysteresis\nneed_2_swings_same_sign\nor_strong_opposite_BOS?"}
+  Hyst -->|Insufficient| KeepPrev[Keep_PrevContext]
+  Hyst -->|Confirmed| RuleCtx[RuleContext_candidate]
+  KeepPrev --> Rails
+  RuleCtx --> Rails
+
+  Feat --> Brain["BRAIN_LLM_optional_Phase2\ninput_30_D1_plus_swings_plus_features\noutput_context_confidence_narrative"]
+  FetchD1 --> Brain
+  Basket["Basket_state_lots_PnL"] --> Brain
+  Brain --> Veto{"LLM_veto_or_conf_lt_MinConf?"}
+  Veto -->|Yes| SoftKeep[Prefer_PrevContext_or_WAIT_gate]
+  Veto -->|No| LlmCtx[LLM_context_d1]
+  SoftKeep --> Rails
+  LlmCtx --> Rails
+
+  Rails["SAFETY_RAILS_clamp\nno_invented_swings\nmatrix_ready_ContextFinal"]
+  Rails --> Out[ContextFinal_UPTREND_DOWNTREND_SIDEWAY]
+  Out --> Matrix["Decision_Matrix_plus_H1_Signal"]
+
+  noteEyes["Phase1_backtestable_eyes_only"]
+  noteBrain["Phase2_shadow_compare_LLM_vs_Rule_before_authority"]
+  Eyes -.-> noteEyes
+  Brain -.-> noteBrain

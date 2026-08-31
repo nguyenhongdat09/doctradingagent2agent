@@ -1,0 +1,47 @@
+%% A05 — Boss interrupt: wake sleeping agents → chat → ACK → A OrderSend
+%% Spec: 11-boss-interrupt-flow
+
+sequenceDiagram
+  autonumber
+  participant Boss as Boss_Human
+  participant Orch as Orchestrator
+  participant A as AgentA
+  participant B as AgentB
+  participant HV as HardValidator
+  participant MT5 as MT5_Broker
+
+  Note over A,B: Agents_may_be_SLEEPING_on_timer
+  Boss->>Orch: BossWake_intent_symbols
+  Orch->>Orch: cancel_sleep_session_mode_BOSS
+  Orch->>A: ForceWake_with_Boss_intent
+  Orch->>B: ForceWake
+
+  A->>A: Observe_market_plus_Boss_intent
+  A->>HV: TradePlan_or_ActionProposal
+  HV-->>A: HardPass_or_Fail
+  alt HardFail
+    A->>Boss: Explain_blocked_by_phuong_phap
+    Boss->>Orch: end_or_reprompt
+  else HardPass
+    A->>B: Plan
+    B->>Boss: Independent_dissent_or_agree_ballot
+    loop BossChat_max_turns
+      Boss->>A: Question_or_direction
+      A->>Boss: Clarification
+      B->>Boss: Counter_evidence
+      A->>HV: Optional_revise
+    end
+    Boss->>Orch: BossACK
+    alt B_APPROVE
+      A->>MT5: OrderSend_CONSENSUS_WITH_BOSS
+    else BossOverride_with_reason
+      A->>MT5: OrderSend_BOSS_OVERRIDE_EXEC
+    else No_override_on_dissent
+      A->>Orch: DEFER_WakeRequest_C1_C2_C3
+    end
+    MT5-->>A: Fill_optional
+    A->>Orch: ExecutionReport_optional
+  end
+  Orch->>Orch: session_mode_AUTO
+  A->>Orch: WakeRequest_next
+  Orch->>Orch: sleep_until_next_wake_at

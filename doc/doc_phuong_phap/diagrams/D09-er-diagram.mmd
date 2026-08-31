@@ -1,0 +1,133 @@
+%% D09-er-diagram.mmd
+%% ER Diagram: 8 bảng cơ sở dữ liệu SQLite dca_<symbol>.db
+erDiagram
+    MarketOrderInfo {
+        INTEGER id PK
+        TEXT symbol
+        TEXT instance_id
+        TEXT plan_id UK
+        TEXT action_type
+        TEXT direction
+        REAL lot
+        REAL target_lot
+        REAL price_ref
+        REAL tp_pips
+        REAL sl
+        TEXT reason
+        TEXT ballot
+        TEXT session_mode
+        TEXT status
+        TIMESTAMP created_at
+        TIMESTAMP processed_at
+        TEXT error
+    }
+
+    MarketOrderInfoArchive {
+        INTEGER id PK
+        TEXT symbol
+        TEXT instance_id
+        TEXT plan_id
+        TEXT action_type
+        TEXT direction
+        REAL lot
+        REAL executed_price
+        REAL executed_lot
+        INTEGER ticket
+        TEXT fill_status
+        TEXT fill_error
+        TIMESTAMP archived_at
+    }
+
+    PairState {
+        TEXT symbol PK
+        TEXT state
+        TEXT context
+        TEXT prev_context
+        TEXT basket_dir
+        REAL total_lot
+        INTEGER ladder_step
+        REAL adverse_ref
+        TEXT last_processed_bar_id
+        TEXT cooldown_until_bar
+        TIMESTAMP updated_at
+    }
+
+    AuditLog {
+        INTEGER id PK
+        TIMESTAMP ts
+        TEXT symbol
+        TEXT event_type
+        TEXT plan_id
+        TEXT ballot_id
+        INTEGER hard_pass
+        TEXT decision
+        TEXT reason
+        TEXT outcome
+        TEXT extra
+    }
+
+    Plans {
+        TEXT plan_id PK
+        TEXT symbol
+        TEXT action
+        TEXT direction
+        REAL lot
+        TEXT context
+        TEXT signal
+        TEXT rule_refs
+        TEXT thesis
+        TEXT risks
+        TEXT invalidation
+        TEXT status
+        TIMESTAMP created_at
+    }
+
+    Ballots {
+        TEXT ballot_id PK
+        TEXT plan_id FK
+        INTEGER round
+        TEXT decision
+        TEXT thesis
+        TEXT counter_evidence
+        TEXT agree_points
+        TEXT dissent_points
+        TEXT requested_changes
+        REAL similarity_score
+        TIMESTAMP created_at
+    }
+
+    Sessions {
+        TEXT session_id PK
+        TEXT symbol
+        TEXT trigger_type
+        TEXT status
+        TIMESTAMP started_at
+        TIMESTAMP ended_at
+    }
+
+    Messages {
+        INTEGER msg_id PK
+        TEXT session_id FK
+        TEXT sender
+        TEXT role
+        TEXT content
+        TIMESTAMP created_at
+    }
+
+    LLMRuns {
+        TEXT run_id PK
+        TEXT caller
+        TEXT model
+        TEXT provider
+        INTEGER tokens_in
+        INTEGER tokens_out
+        REAL cost_usd
+        INTEGER latency_ms
+        TEXT purpose
+        TIMESTAMP created_at
+    }
+
+    Plans ||--o{ Ballots : "được thẩm định bởi"
+    Sessions ||--o{ Messages : "chứa các"
+    Plans ||--o| MarketOrderInfo : "sinh ra lệnh"
+    Plans ||--o{ AuditLog : "ghi nhận trong"

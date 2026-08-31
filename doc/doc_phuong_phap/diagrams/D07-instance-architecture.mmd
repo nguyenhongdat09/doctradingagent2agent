@@ -1,0 +1,41 @@
+%% D07-instance-architecture.mmd
+%% Sơ đồ kiến trúc tổng thể 1 Instance (Python Engine <-> Agents <-> SQLite <-> Executor <-> MT5)
+flowchart TB
+    subgraph MarketData ["Thị Trường & Sàn Giao Dịch"]
+        MT5["MetaTrader 5 Terminal\n(Nguồn chân lý vị thế)"]
+    end
+
+    subgraph Layer1 ["Lớp 1: Engine Mắt & Thực Thi (Deterministic Python)"]
+        DataFeed["Data Ingestion & Incremental Cache\n(D1: 30-120 bars, H1: 30-200 bars)"]
+        EyeEngine["Eye Engine:\n- D1 Pivot/Swing Radius 3 + BOS\n- H1 Strength Score 4 thành phần + DQ"]
+        OrderQueue[("SQLite DB: dca_symbol.db\nBảng MarketOrderInfo (WAL Mode)")]
+        Executor["Executor Thread (Thường trực)\n- Claim PROCESSING (Atomic)\n- OrderSend / PositionClose\n- Archive + Update PairState"]
+    end
+
+    subgraph Layer2 ["Lớp 2: Bộ Não LLM & Hội Đồng"]
+        AgentA["Agent A (Planner-Executor)\n- get_market_snapshot()\n- Soạn TradePlan"]
+        AgentB["Agent B (Independent Challenger)\n- Ballot độc lập\n- Bắt buộc counter_evidence\n- Check anti-sycophancy"]
+        BossChannel["Boss Channel (Interrupt)\n- BossWake\n- Hội đồng 3 bên thảo luận"]
+    end
+
+    subgraph Layer3 ["Lớp 3: Safety Rails & Hard Validator"]
+        HardVal{"HardValidator (Cổng thép):\n1. Ma trận D1/H1 hợp lệ?\n2. Spacing >= min_spacing?\n3. Lot ladder đúng bước?\n4. RECOVERY: Không mở ngược?\n5. Kill-Switch = OFF?"}
+    end
+
+    MT5 -->|Kéo nến D1/H1 & Positions| DataFeed
+    DataFeed --> EyeEngine
+    EyeEngine -->|get_market_snapshot()| AgentA
+    EyeEngine -->|get_structure_features()| AgentB
+    
+    BossChannel -.->|Interrupt Wake| AgentA
+    BossChannel -.->|Interrupt Wake| AgentB
+    
+    AgentA <-->|Thảo luận / Phản biện <= 2 vòng| AgentB
+    AgentA & AgentB -->|ActionProposal + Ballot| HardVal
+    
+    HardVal -->|PASS| OrderQueue
+    HardVal -->|FAIL / VETO| AuditFail["Ghi AuditLog (Từ chối)"]
+    
+    OrderQueue -->|Poll & Claim| Executor
+    Executor -->|Gọi API độc quyền| MT5
+    Executor -->|Archive & Update State| OrderQueue

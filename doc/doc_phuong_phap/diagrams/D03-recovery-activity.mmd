@@ -1,0 +1,57 @@
+%% D03 — RECOVERY activity / loop flowchart
+%% Spec refs: 07-recovery-loop, 05-capital-dca, 03-h1-signal
+%% Loop until TotalLot == 0 -> FLAT
+
+flowchart TD
+  Start([Enter_cycle_State_eq_RECOVERY_H1_closed]) --> Kill{"KillSwitch?"}
+  Kill -->|"KillFlatten"| FlatKill["CLOSE_ALL -> FLAT"]
+  Kill -->|"Pause"| WaitKill[WAIT_no_new_orders]
+  Kill -->|No| Refresh["Refresh_positions\nTotalLot_BasketDir_AdverseRef_BasketProfit"]
+
+  Refresh --> Zero1{"TotalLot_eq_0?"}
+  Zero1 -->|Yes| ExitFlat1["Transition_FLAT\nAlert_EXIT_RECOVERY\nreset_Ladder_Cooldown"]
+  Zero1 -->|No| EvalSig["H1_StrengthScore_rails\nPUSH_ge_0.6"]
+
+  EvalSig --> Class{"Classify_vs_BasketDir"}
+
+  Class -->|"AdverseSqueeze\nBUY_and_PUSH_DOWN\nor_SELL_and_PUSH_UP"| AdvSp{"Spacing_OK?\nBUY_Bid_le_AdvRef_minus_Sp\nSELL_Ask_ge_AdvRef_plus_Sp\nSp_eq_max_S_MIN_15_C_STR_0.7_x_ATR_pips"}
+  AdvSp -->|No| WaitAdv[WAIT_insufficient_spacing]
+  AdvSp -->|Yes| Marg1{"Margin_OK_for_next_ladder_lot?"}
+  Marg1 -->|No| AlertM1[Alert_margin_block_WAIT]
+  Marg1 -->|Yes| Dca["RECOVERY_DCA\nMARKET_same_BasketDir\nLot_eq_L0_plus_k_x_0.05\nLadderStep_plus_1\nTotalLot_increases"]
+  Dca --> AfterOps
+
+  Class -->|"FavorableSqueeze\nBUY_and_PUSH_UP\nor_SELL_and_PUSH_DOWN"| WinCheck{"All_positions_profit_ge_0\nAND_BasketProfit_ge_0?"}
+  WinCheck -->|Yes| CloseAllWin["CLOSE_ALL_winners_path\n->_TotalLot_0"]
+  CloseAllWin --> AfterOps
+  WinCheck -->|No| PayPct["PayoffLot_eq_clamp_TotalLot_x_P_PCT\nP_PCT_in_0.15_0.30_default_0.20"]
+  PayPct --> Marg2{"Margin_OK_for_PayoffLot?"}
+  Marg2 -->|No| AlertM2[Alert_margin_block_WAIT]
+  Marg2 -->|Yes| OpenPay["MARKET_Payoff_same_BasketDir\ncomment_PAYOFF\nTotalLot_temporarily_up"]
+  OpenPay --> PickLos["Select_loser_argmin_abs_profit\nsmallest_money_loss_first"]
+  PickLos --> Cover{"profit_pool_ge_abs_loser_profit?\npool_eq_PayoffProfit_plus_optional_winners"}
+  Cover -->|Yes| FullCut["CLOSE_full_smallest_loser"]
+  Cover -->|No| PartCut["PARTIAL_CLOSE_loser\nvolume_funded_by_profit_pool\nmin_broker_volume_step"]
+  FullCut --> AfterOps
+  PartCut --> AfterOps
+
+  Class -->|NONE| WaitNone[WAIT_no_squeeze]
+
+  WaitAdv --> EndStay
+  AlertM1 --> EndStay
+  AlertM2 --> EndStay
+  WaitNone --> EndStay
+  WaitKill --> EndStay
+
+  AfterOps["Refresh_TotalLot_after_ops"] --> Zero2{"TotalLot_eq_0?"}
+  Zero2 -->|Yes| ExitFlat2["Transition_FLAT\nAlert_EXIT_RECOVERY"]
+  Zero2 -->|No| EndStay["Remain_RECOVERY\nDO_NOT_downgrade_to_NORMAL\neven_if_TotalLot_lt_R_TH_0.3"]
+
+  ExitFlat1 --> End([End_RECOVERY_cycle])
+  ExitFlat2 --> End
+  FlatKill --> End
+  EndStay --> End
+
+  %% Constraints box as nodes
+  EndStay --> Constraints["Constraints_locked\nno_opposite_direction_open\nno_NORMAL_BasketTP_rule\nno_max_drawdown_auto_stop\nloop_until_flat_or_kill"]
+  Constraints --> End

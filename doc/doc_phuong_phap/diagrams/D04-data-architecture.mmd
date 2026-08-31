@@ -1,0 +1,64 @@
+%% D04 — Data sources / architecture (structure-based context)
+%% Spec: 09-data-sources, 02-d1-context
+
+flowchart LR
+  subgraph Bars ["Market_Bars"]
+    H1Bars["H1_Rates_closed\nsnapshot_20_to_30"]
+    D1Bars["D1_Rates_closed\nsnapshot_30_no_repaint"]
+    NewBar["NewBar_Detector_H1"]
+  end
+
+  subgraph Struct ["Structure_Eyes"]
+    Swing["SwingDetect_radius_3\nmax_6_PH_PL"]
+    Feat["Features_HH_HL_BOS\nrange_compress_ATR14_D1"]
+  end
+
+  subgraph Ind ["Indicators_non_context"]
+    ATRD1["ATR14_D1_compress_only"]
+    ATRH1["ATR14_H1_signal_spacing"]
+    RSI["RSI14_H1_optional"]
+  end
+
+  subgraph Engines ["Decision_Engines"]
+    Rails["ContextRails_plus_optional_LLM"]
+    SigEng["SignalEngine"]
+    Matrix["DecisionMatrix"]
+    Space["SpacingCalc"]
+    Ladder["LotLadder"]
+  end
+
+  subgraph SM ["Pair_State_x4"]
+    P1["AUDCAD"]
+    P2["AUDNZD"]
+    P3["GBPUSD"]
+    P4["NZDCAD"]
+  end
+
+  subgraph Exec ["Execution"]
+    Basket["PositionBasket"]
+    Trade["TradeGateway"]
+    Acct["AccountInfo"]
+  end
+
+  NewBar --> P1
+  D1Bars --> Swing
+  Swing --> Feat
+  D1Bars --> ATRD1
+  ATRD1 --> Feat
+  Feat --> Rails
+  H1Bars --> ATRH1
+  H1Bars --> RSI
+  H1Bars --> SigEng
+  ATRH1 --> SigEng
+  ATRH1 --> Space
+  RSI --> SigEng
+  Rails --> Matrix
+  SigEng --> Matrix
+  Rails --> P1
+  SigEng --> P1
+  Matrix --> P1
+  Space --> P1
+  Ladder --> P1
+  P1 --> Basket
+  Basket --> Trade
+  Acct --> Trade
