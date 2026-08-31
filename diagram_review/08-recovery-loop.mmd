@@ -1,0 +1,61 @@
+%% ============================================================================
+%% VÒNG LẶP CỨU LỖ (RECOVERY LOOP & PAYOFF STRATEGY)
+%% Trách nhiệm: ✅ LLM điều phối chiến dịch giải cứu rổ lệnh khi TotalLot >= 0.30 (R_TH)
+%% Ưu tiên: Cắt lệnh lỗ NHỎ NHẤT về tiền (argmin |profit|) trước
+%% ============================================================================
+
+flowchart TD
+    StartRecovery["🚨 BƯỚC VÀO RECOVERY STATE<br/>(TotalLot >= 0.30 lot - R_TH)"]
+
+    EvaluateMarket{"Đánh giá trạng thái thị trường<br/>(Agent A + Agent B tại nhịp C3)"}
+
+    subgraph AdverseBranch ["🔻 1. KỊCH BẢN ÉP NGƯỢC (Adverse Squeeze)"]
+        AdvCondition["Giá tiếp tục đi ngược xu hướng"]
+        CheckAdvSpacing{"Giá đi thêm >= Spacing?<br/>(spacing_met == True)"}
+        OpenRecoveryDCA["Mở thêm 1 lệnh RECOVERY_DCA<br/>- Lot nhỏ an toàn (Cấm mở ngược hướng rổ)<br/>- Kéo giá hòa vốn về gần"]
+        AdvWait["Chờ đợi kiên nhẫn (Không nhồi bừa bãi)"]
+        
+        AdvCondition --> CheckAdvSpacing
+        CheckAdvSpacing -->|Đạt Spacing| OpenRecoveryDCA
+        CheckAdvSpacing -->|Chưa đủ| AdvWait
+    end
+
+    subgraph FavorableBranch ["🟢 2. KỊCH BẢN THUẬN LỢI (Favorable Squeeze)"]
+        FavCondition["Thị trường xuất hiện nến đảo chiều hồi phục"]
+        OpenPayoff["Mở lệnh PAYOFF LOT<br/>(Khối lượng = 15% - 30% TotalLot)"]
+        PayoffProfit["Lệnh Payoff lướt sóng có lãi (+X USD)"]
+        
+        TiaLenhAm["TIẾN HÀNH TỈA LỆNH ÂM (Payoff Execution)<br/>Dùng toàn bộ tiền lãi +X USD để:<br/>- Đóng toàn phần / từng phần (Partial Close)<br/>- LỆNH LỖ NHỎ NHẤT (|loss| nhỏ nhất / argmin |profit|)"]
+        
+        FavCondition --> OpenPayoff --> PayoffProfit --> TiaLenhAm
+    end
+
+    UpdateBasket["Cập nhật lại TotalLot mới trong PairState DB"]
+    CheckClean{"TotalLot == 0.0?<br/>(Rổ lệnh đã sạch bóng)"}
+    
+    BackToFlat["🎉 GIẢI CỨU THÀNH CÔNG!<br/>Chuyển trạng thái về FLAT<br/>Ghi nhận bài học kinh nghiệm vào experience.db"]
+    StayRecovery["Tiếp tục duy trì RECOVERY<br/>(Lặp lại vòng lặp tại nhịp C3 kế tiếp)"]
+
+    StartRecovery --> EvaluateMarket
+    EvaluateMarket -->|Thị trường tiếp tục xả mạnh| AdverseBranch
+    EvaluateMarket -->|Thị trường có tín hiệu hồi| FavorableBranch
+
+    OpenRecoveryDCA --> UpdateBasket
+    TiaLenhAm --> UpdateBasket
+    AdvWait --> UpdateBasket
+
+    UpdateBasket --> CheckClean
+    CheckClean -->|ĐÚNG| BackToFlat
+    CheckClean -->|"SAI: Vẫn còn lệnh"| StayRecovery
+    StayRecovery -.->|"Nhịp C3 tiếp theo"| EvaluateMarket
+
+    %% Styling
+    classDef start fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+    classDef adverse fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+    classDef favorable fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef finish fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
+
+    class StartRecovery start;
+    class AdvCondition,CheckAdvSpacing,OpenRecoveryDCA,AdvWait adverse;
+    class FavCondition,OpenPayoff,PayoffProfit,TiaLenhAm favorable;
+    class BackToFlat finish;

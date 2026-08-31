@@ -1,0 +1,39 @@
+%% ============================================================================
+%% HÀNG ĐỢI LỆNH & WORKER THỰC THI (QUEUE & EXECUTOR)
+%% Trách nhiệm: ⚙️ Đôi tay thực thi cơ học, đảm bảo không bao giờ đánh trùng lệnh
+%% ============================================================================
+
+stateDiagram-v2
+    [*] --> PENDING : HardValidator phê duyệt\nINSERT INTO MarketOrderInfo
+
+    state PENDING {
+        [*] --> ChoXuLy : Chờ Executor quét (Polling loop)
+    }
+
+    PENDING --> PROCESSING : Executor thực hiện Atomic Claim\nUPDATE status='PROCESSING' WHERE id=...
+
+    state PROCESSING {
+        [*] --> GoiMT5 : Gọi API mt5.order_send()
+        GoiMT5 --> KiemTraKetQua : Nhận MT5 Return Code
+    }
+
+    PROCESSING --> ARCHIVED : Giao dịch thành công (retcode == 10009)\n- Ghi vé Ticket vào open_orders\n- Cập nhật pair_state\n- XÓA khỏi hàng đợi
+    PROCESSING --> FAILED : Giao dịch thất bại / Timeout\n- Ghi log lỗi chi tiết\n- Gửi Telegram Alert khẩn cấp
+
+    ARCHIVED --> [*] : Hoàn tất 1 vòng đời lệnh
+    FAILED --> [*] : Dừng lại để bảo vệ tài khoản
+
+    note right of PENDING
+        🔒 ATOMIC TRANSACTION:
+        Đảm bảo chỉ DUY NHẤT 1 Worker
+        chiếm quyền xử lý (Claim),
+        triệt tiêu 100% rủi ro bắn 2 lệnh
+        cùng lúc (Double Execution).
+    end note
+
+    note right of PROCESSING
+        ⚙️ KHÔNG TỰ QUYẾT ĐỊNH:
+        Executor chỉ làm nhiệm vụ
+        nhận lệnh và gửi sang sàn MT5.
+        Không có bất kỳ logic trading nào ở đây.
+    end note

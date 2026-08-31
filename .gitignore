@@ -3,10 +3,26 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# OS generated files
-.DS_Store
-Thumbs.db
-desktop.ini
+# Python virtual environment
+venv/
+.venv/
+env/
+
+# Environment secrets (DO NOT COMMIT)
+config/secrets.env
+*.env
+
+# SQLite databases & Local runtime data
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/backups/
+*.db
+*.sqlite3
+
+# Logs & Audit records
+logs/
+*.log
 
 # IDE & Editor files
 .vscode/
@@ -14,8 +30,7 @@ desktop.ini
 *.swp
 *.swo
 
-# Environment variables & DBs
-*.env
-*.db
-*.sqlite3
-*.log
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini

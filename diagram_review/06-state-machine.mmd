@@ -1,0 +1,47 @@
+%% ============================================================================
+%% STATE MACHINE QUẢN LÝ TRẠNG THÁI RỦI RO CẶP TIỀN
+%% Ba trạng thái: FLAT ➔ NORMAL ➔ RECOVERY ➔ FLAT
+%% ============================================================================
+
+stateDiagram-v2
+    [*] --> FLAT : Khởi động hệ thống (Chưa có lệnh)
+
+    state FLAT {
+        [*] --> NguChoH1 : TotalLot == 0.0\nChỉ thức giấc khi H1 đóng nến\nChờ tín hiệu đẹp (Strength >= 0.6)
+    }
+
+    state NORMAL {
+        [*] --> QuanLyRoLenh : 0.0 < TotalLot < 0.30 (R_TH)\n- Cho phép nhồi DCA khi đủ Spacing\n- Chốt lời toàn bộ khi chạm TP (vd +30 pips)
+    }
+
+    state RECOVERY {
+        [*] --> CheDoCuuLo : TotalLot >= 0.30 (R_TH)\n- KHÔNG mở lệnh Entry mới\n- Chỉ mở DCA cứu hộ hoặc Payoff lướt sóng\n- Tỉa dần các lệnh lỗ nhỏ nhất (argmin |profit|)
+    }
+
+    FLAT --> NORMAL : Agent duyệt lệnh ENTRY đầu tiên\n(Mở L0 = 0.05 lot, TotalLot = 0.05)
+
+    NORMAL --> FLAT : Đạt mục tiêu lợi nhuận (+TP)\nĐóng sạch rổ lệnh (TotalLot = 0)
+
+    NORMAL --> RECOVERY : Giá đi ngược, nhồi thêm DCA\n(Tổng khối lượng chạm ngưỡng R_TH >= 0.30)
+
+    RECOVERY --> FLAT : Hoàn tất chu kỳ cứu lỗ Payoff\nĐóng sạch toàn bộ lệnh (TotalLot == 0)
+
+    note right of FLAT
+        💤 FLAT STATE:
+        An toàn tuyệt đối.
+        Không tốn tài nguyên LLM vô ích.
+    end note
+
+    note right of NORMAL
+        📊 NORMAL STATE:
+        Vận hành thông thường.
+        Rủi ro nằm trong tầm kiểm soát.
+    end note
+
+    note right of RECOVERY
+        🚨 RECOVERY STATE (Dính chặt):
+        Khi đã vào RECOVERY, hệ thống PHẢI
+        giữ nguyên chế độ cứu lỗ cho đến khi
+        TotalLot = 0 (Về FLAT). Tuyệt đối không
+        tự ý hạ cấp về NORMAL giữa chừng.
+    end note

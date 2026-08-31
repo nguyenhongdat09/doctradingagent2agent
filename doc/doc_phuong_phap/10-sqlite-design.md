@@ -12,12 +12,12 @@ Tài liệu này chi tiết hóa kiến trúc cơ sở dữ liệu SQLite cho t�
   PRAGMA journal_mode = WAL;
   PRAGMA busy_timeout = 5000;
   PRAGMA foreign_keys = ON;
-  PRAGMA synchronous = NORMAL;
+  PRAGMA synchronous = FULL; -- An toàn tuyệt đối chống crash; có thể dùng NORMAL nếu cần tối ưu I/O
   ```
 
 ---
 
-## 2. CHI TIẾT SCHEMA 8 BẢNG DỮ LIỆU
+## 2. CHI TIẾT SCHEMA 9 BẢNG DỮ LIỆU (Instance Database)
 
 ### 2.1. `MarketOrderInfo` (Hàng đợi lệnh chờ thực thi)
 ```sql
@@ -155,21 +155,34 @@ CREATE TABLE Messages (
 );
 ```
 
-### 2.8. `LLMRuns` (Đo lường & Kiểm toán Chi phí Token)
+### 2.8. `LLMRuns` (Đo lường & Kiểm toán Chi phí Token — Bắt buộc)
 ```sql
 CREATE TABLE LLMRuns (
     run_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    session_id TEXT,
     caller TEXT NOT NULL CHECK(caller IN ('AGENT_A', 'AGENT_B', 'BOSS')),
     model TEXT NOT NULL,
     provider TEXT NOT NULL,
-    tokens_in INTEGER NOT NULL,
-    tokens_out INTEGER NOT NULL,
-    cost_usd REAL NOT NULL,
-    latency_ms INTEGER NOT NULL,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0.0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
     purpose TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_llm_runs_lookup ON LLMRuns(symbol, caller, created_at);
 ```
+
+> **Quy ước giá trị `purpose` (ADR-008):**
+> - `'memory_pack'`: Tách riêng đo lường chi phí nạp/kết xuất bộ nhớ kinh nghiệm.
+> - `'context_analysis'`: Lượt phân tích bối cảnh D1 của Agent A/B.
+> - `'signal_analysis'`: Lượt phân tích tín hiệu H1 của Agent A/B.
+> - `'plan'`: Lượt soạn thảo kế hoạch `TradePlan` của Agent A.
+> - `'ballot'`: Lượt thẩm định `ReviewBallot` của Agent B.
+> - `'revision'`: Lượt sửa đổi kế hoạch trong vòng tranh luận Consensus.
+> - `'boss_chat'`: Lượt đàm thoại trong phiên Boss.
 
 ---
 

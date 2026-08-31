@@ -1,0 +1,66 @@
+%% ============================================================================
+%% BỘ MÁY TÍNH TOÁN "MẮT" (EYES ENGINE)
+%% Trách nhiệm: 🔧 Thuần túy tính toán số học & nén dữ liệu. KHÔNG QUYẾT ĐỊNH LỆNH!
+%% ============================================================================
+
+flowchart TD
+    subgraph D1_Pipeline ["📈 PHẦN A: D1 STRUCTURE PIPELINE (Định hình bức tranh lớn)"]
+        D1_Data["Nến D1 (Daily OHLCV)<br/>Lấy tối thiểu 50 nến"]
+        PivotDetect["Tìm Pivot Swings<br/>- Swing High (Đỉnh cục bộ)<br/>- Swing Low (Đáy cục bộ)"]
+        StructureCheck["Xác định Cấu trúc<br/>- HH / HL ➔ Uptrend cấu trúc<br/>- LH / LL ➔ Downtrend cấu trúc<br/>- Phá vỡ mức cũ ➔ BOS (Break of Structure)"]
+        RawContext["Raw Context<br/>- UPTREND / DOWNTREND / SIDEWAY"]
+        Hysteresis["Bộ lọc Hysteresis (Chống giật)<br/>- Yêu cầu nến xác nhận đủ độ sâu<br/>- Tránh đảo chiều giả liên tục"]
+        D1_Final["ContextFinal (D1)<br/>- Xu hướng chuẩn xác của ngày"]
+
+        D1_Data --> PivotDetect --> StructureCheck --> RawContext --> Hysteresis --> D1_Final
+    end
+
+    subgraph H1_Pipeline ["⏱️ PHẦN B: H1 SIGNAL PIPELINE (Đo lường xung lực vào lệnh)"]
+        H1_Data["Nến H1 (Hourly OHLCV)<br/>Nến vừa đóng cửa gần nhất"]
+        
+        subgraph ScoreCalc ["Tính Strength Score (Tổng trọng số = 1.0)"]
+            Mom["Momentum (40% / 0.4)<br/>Độ lớn thân nến & Vận tốc giá"]
+            Str["Structural (30% / 0.3)<br/>Vị trí nến so với Swing H1 gần nhất"]
+            Loc["Location (20% / 0.2)<br/>Khoảng cách tới vùng S/R (Cản)"]
+            Conf["Confirmation (10% / 0.1)<br/>Khối lượng Volume & Râu nến"]
+        end
+
+        RawScore["Raw Strength Score (0.0 ➔ 1.0)<br/>= 0.4*Mom + 0.3*Str + 0.2*Loc + 0.1*Conf"]
+
+        subgraph DQ_Filters ["Bộ Lọc Loại Trừ DQ (Disqualification)"]
+            DQ1["Streak Check<br/>(Đã tăng/giảm quá nhiều nến liên tiếp)"]
+            DQ2["D1 Wall Check<br/>(Đang đâm đầu thẳng vào Cản cứng D1)"]
+        end
+
+        FinalScore["Strength Score Final (0.0 ➔ 1.0)"]
+
+        subgraph ThresholdDecision ["Phân Vùng Tín Hiệu (Ngưỡng kích hoạt)"]
+            PushZone["Strength >= 0.6<br/>➔ Tín hiệu PUSH (Đủ mạnh)"]
+            SoftZone["0.4 <= Strength < 0.6<br/>➔ Vùng SOFT ZONE (Lưỡng lự - Chờ)"]
+            IgnoreZone["Strength < 0.4<br/>➔ IGNORE (Yếu - Bỏ qua)"]
+        end
+
+        H1_Data --> ScoreCalc
+        Mom & Str & Loc & Conf --> RawScore
+        RawScore --> DQ_Filters
+        DQ1 & DQ2 --> FinalScore
+        FinalScore --> PushZone & SoftZone & IgnoreZone
+    end
+
+    subgraph SnapshotOutput ["📦 ĐÓNG GÓI OUTPUT: MarketSnapshot (JSON)"]
+        Snapshot["MarketSnapshot Object<br/>{<br/>  symbol: 'AUDCAD',<br/>  d1_context: ContextFinal,<br/>  h1_strength: StrengthFinal,<br/>  current_price: 0.89500,<br/>  atr_d1: 0.0055, atr_h1: 0.0012,<br/>  open_positions_summary: [...]<br/>}"]
+    end
+
+    D1_Final --> SnapshotOutput
+    FinalScore --> SnapshotOutput
+
+    %% Ghi chú trách nhiệm
+    classDef comp fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1;
+    classDef calc fill:#fff8e1,stroke:#fbc02d,stroke-width:2px,color:#f57f17;
+    classDef out fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef alert fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+
+    class D1_Data,H1_Data,PivotDetect,StructureCheck,RawContext,Hysteresis,D1_Final comp;
+    class Mom,Str,Loc,Conf,RawScore,FinalScore calc;
+    class PushZone,Snapshot out;
+    class DQ1,DQ2,SoftZone,IgnoreZone alert;

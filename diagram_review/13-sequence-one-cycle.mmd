@@ -1,0 +1,56 @@
+%% ============================================================================
+%% TRÌNH TỰ CHI TIẾT 1 CHU KỲ HOÀN CHỈNH (SEQUENCE ONE CYCLE)
+%% Từng bước từ lúc Scheduler thức giấc đến khi lệnh vào MT5 và đi ngủ tiếp
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+    actor Sched as ⏰ Scheduler
+    participant MT5 as 🏦 MT5 Terminal
+    participant Eyes as 🔧 Eyes Engine
+    participant ExpDB as 🧠 Experience DB
+    participant AgentA as 🧠 Agent A (Strategist)
+    participant AgentB as 🧐 Agent B (Challenger)
+    participant Val as 🛡️ HardValidator
+    participant Queue as 📦 SQLite Queue
+    participant Exec as ⚙️ Queue Executor
+    participant StateDB as 💾 PairState DB
+
+    Note over Sched,StateDB: 🚀 BẮT ĐẦU CHU KỲ MỚI (VÍ DỤ: NHỊP C1 ĐẦU GIỜ HOẶC C3 ĐỦ SPACING)
+
+    Sched->>Eyes: Đánh thức: Yêu cầu cập nhật tình hình thị trường
+    Eyes->>MT5: Lấy chuỗi nến D1, H1 và giá Bid/Ask
+    MT5-->>Eyes: Trả về mảng nến OHLCV
+    Eyes->>Eyes: Tính D1 Context + H1 Strength Score
+    Eyes->>ExpDB: Yêu cầu nạp MemoryPack (<= 500 tokens)
+    ExpDB-->>Eyes: Trả về Profile cặp tiền + Top 6 bài học phù hợp
+
+    Note over Eyes,AgentA: 📦 GOM DỮ LIỆU THÀNH MarketSnapshot
+    Eyes->>AgentA: Gửi MarketSnapshot + MemoryPack
+    AgentA->>AgentA: Suy luận chiến lược (LLM API Call)
+    AgentA-->>AgentB: Xuất TradePlan (ENTRY/DCA/CLOSE/PAYOFF/WAIT)
+
+    AgentB->>AgentB: Đánh giá phản biện độc lập (LLM API Call)
+    AgentB-->>AgentA: Trả về ReviewBallot (APPROVE)
+
+    Note over AgentA,Val: 🛡️ KIỂM DUYỆT AN TOÀN KỸ THUẬT (PYTHON HARD VALIDATOR)
+    AgentA->>Val: Chuyển giao TradePlan đã đồng thuận
+    Val->>Val: Kiểm tra 5 quy tắc cứng (State, Spacing, Lot, Direction, Freeze)
+
+    alt Kiểm tra 5/5 Quy tắc THÀNH CÔNG
+        Val->>Queue: INSERT INTO MarketOrderInfo (status='PENDING')
+        Val->>ExpDB: Ghi log LLM Run (Tokens, Chi phí USD, Độ trễ)
+        
+        Note over Queue,Exec: ⚙️ ĐÔI TAY THỰC THI (EXECUTOR WORKER)
+        Exec->>Queue: Atomic Claim: UPDATE status='PROCESSING'
+        Exec->>MT5: Gọi mt5.order_send()
+        MT5-->>Exec: Khớp lệnh thành công (Trả về Ticket ID)
+        
+        Exec->>StateDB: Cập nhật open_orders & pair_state (TotalLot mới)
+        Exec->>Queue: XÓA bản ghi khỏi MarketOrderInfo
+    else Vi phạm quy tắc an toàn
+        Val->>StateDB: Ghi log Audit từ chối & Bắn Alert
+    end
+
+    Sched->>Sched: Tính toán thời điểm đánh thức tiếp theo (Next Wake Time)
+    Note over Sched,StateDB: 💤 HỆ THỐNG ĐI NGỦ (TIẾT KIỆM TỐI ĐA CPU & TOKEN)

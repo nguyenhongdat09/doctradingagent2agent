@@ -1,0 +1,44 @@
+%% ============================================================================
+%% CƠ CHẾ DCA & THỜI ĐIỂM KÍCH HOẠT (TIMING C0/C1/C2/C3 - DEC-09)
+%% Trách nhiệm: 🔧 Scheduler phân luồng nhịp thức giấc + ✅ LLM quyết định DCA
+%% ============================================================================
+
+flowchart TD
+    subgraph SchedulerTypes ["⏰ BỐN LOẠI NHỊP THỨC GIẤC CỦA SCHEDULER"]
+        C0["C0: Startup Reconcile<br/>- Thức giấc khi khởi động hệ thống<br/>- Đồng bộ trạng thái DB với MT5"]
+        C1["C1: H1 Bar Close<br/>- Đúng đầu mỗi giờ (vd 08:00, 09:00)<br/>- Nơi duy nhất xét lệnh ENTRY"]
+        C2["C2: D1 Bar Close<br/>- Đúng đầu mỗi ngày mới (00:00 server)<br/>- Tính lại Context D1 & ATR ngày"]
+        C3["C3: Intra-bar Monitor<br/>- Định kỳ trong giờ (mỗi 5-15 phút)<br/>- Giám sát vị thế mở & Spacing DCA"]
+    end
+
+    subgraph DCACheckWorkflow ["📐 QUY TRÌNH KIỂM TRA ĐIỀU KIỆN DCA (DEC-09)"]
+        WakeC3["Nhịp thức giấc C3 kích hoạt"]
+        CheckBasket{"Có lệnh đang mở không?<br/>(TotalLot > 0)"}
+        CalcSpacing["Tính Khoảng Cách Spacing Động<br/>Spacing = BaseSpacing * (ATR_H1 / ATR_ref)"]
+        CheckDistance{"Khoảng cách giá đi ngược<br/>>= Spacing?"}
+        
+        WakeC3 --> CheckBasket
+        CheckBasket -->|"Không: Đang FLAT"| SleepAgain["Đi ngủ tiếp (Không tốn token)"]
+        CheckBasket -->|"Có: Đang NORMAL hoặc RECOVERY"| CalcSpacing
+        CalcSpacing --> CheckDistance
+        CheckDistance -->|"Chưa đủ khoảng cách"| SleepAgain
+        CheckDistance -->|"ĐỦ SPACING: spacing_met = True"| TriggerLLM["KÍCH HOẠT NÃO BỘ LLM (A + B)"]
+    end
+
+    subgraph LLMDecision ["✅ NÃO BỘ ĐÁNH GIÁ TỨC THÌ (KHÔNG CHỜ H1 CLOSE)"]
+        AgentReview["Agent A & Agent B phân tích:<br/>1. Giá đã chạm vùng đảo chiều chưa?<br/>2. Lực bán/mua ngược chiều còn mạnh không?<br/>3. Quyết định mở DCA ngay hay chờ thêm?"]
+        Consensus["Consensus Protocol ➔ HardValidator ➔ Queue"]
+        
+        TriggerLLM --> AgentReview --> Consensus
+    end
+
+    %% Ghi chú giải thích DEC-09
+    classDef sched fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px,color:#1a237e;
+    classDef check fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+    classDef pass fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef sleep fill:#eceff1,stroke:#90a4ae,stroke-width:2px,color:#37474f;
+
+    class C0,C1,C2,C3 sched;
+    class WakeC3,CalcSpacing,CheckBasket,CheckDistance check;
+    class TriggerLLM,AgentReview,Consensus pass;
+    class SleepAgain sleep;

@@ -1,0 +1,45 @@
+%% ============================================================================
+%% CHẾ ĐỘ ĐÓNG BĂNG HỆ THỐNG & ĐỘ TIN CẬY (FREEZE & RELIABILITY)
+%% Trách nhiệm: 🛡️ Bảo vệ tài khoản khi có sự cố mạng, LLM sập hoặc mất kết nối MT5
+%% ============================================================================
+
+flowchart TD
+    subgraph IncidentTriggers ["⚠️ CÁC NGUYÊN NHÂN KÍCH HOẠT SỰ CỐ"]
+        T1["1. LLM Outage / Rate Limit<br/>(Gọi API thất bại > 3 lần)"]
+        T2["2. Mất kết nối sàn MT5<br/>(Terminal Disconnected)"]
+        T3["3. Lệch dữ liệu Reconcile<br/>(Khác biệt giữa DB và MT5)"]
+        T4["4. Kill-Switch Khẩn Cấp<br/>(Boss kích hoạt qua CLI/Telegram)"]
+    end
+
+    subgraph FreezeAction ["❄️ KÍCH HOẠT CHẾ ĐỘ ĐÓNG BĂNG: SYSTEM_FREEZE"]
+        FreezeState["SYSTEM_FREEZE = TRUE<br/>(Lưu vào bảng system_flags)"]
+        
+        subgraph FreezeRules ["Quy Tắc Khi Đang Bị Đóng Băng"]
+            R1["🚫 CẤM mở bất kỳ lệnh mới nào (Chặn từ Validator)"]
+            R2["🔒 GIỮ NGUYÊN các lệnh đang chạy (Không panic close)"]
+            R3["📢 BẮN CẢNH BÁO KHẨN CẤP lên Telegram Boss"]
+        end
+    end
+
+    subgraph SelfHealing ["🔄 QUY TRÌNH TỰ PHỤC HỒI (Backoff & Auto-Resume)"]
+        RetryLoop["Vòng lặp Exponential Backoff<br/>- Thử lại sau 5s, 15s, 30s, 60s...<br/>- Kiểm tra Ping LLM & Ping MT5"]
+        HealthCheck{"Hạ tầng đã ổn định trở lại?"}
+        Reconcile["Light Reconcile (Đồng bộ nhẹ)<br/>- Đọc lại toàn bộ Ticket từ MT5<br/>- Khớp lại TotalLot và trạng thái DB"]
+        Unfreeze["HỦY ĐÓNG BĂNG: SYSTEM_FREEZE = FALSE<br/>Hệ thống trở lại hoạt động bình thường"]
+    end
+
+    T1 & T2 & T3 & T4 --> FreezeState
+    FreezeState --> FreezeRules
+
+    FreezeState --> RetryLoop --> HealthCheck
+    HealthCheck -->|Chưa: Vẫn lỗi| RetryLoop
+    HealthCheck -->|Đã thông suốt| Reconcile --> Unfreeze
+
+    %% Styling
+    classDef trig fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+    classDef freeze fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
+    classDef heal fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+
+    class T1,T2,T3,T4 trig;
+    class FreezeState,R1,R2,R3 freeze;
+    class RetryLoop,HealthCheck,Reconcile,Unfreeze heal;

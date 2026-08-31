@@ -1,0 +1,85 @@
+%% ============================================================================
+%% SƠ ĐỒ CHIM ƯNG (HELICOPTER VIEW) - TOÀN CẢNH HỆ THỐNG 1 INSTANCE
+%% Trách nhiệm:
+%% 🔧 Mắt (Eyes Engine): Tính toán thuần túy (KHÔNG ra quyết định lệnh)
+%% ✅ Não (LLM Agents): Agent A lập kế hoạch + Agent B phản biện (Quyết định tối cao)
+%% 🛡️ HardValidator: 5 kiểm tra an toàn bằng code Python (Chống hallucination)
+%% ⚙️ Tay (Executor): Worker độc lập claim queue và gửi lệnh MT5
+%% ============================================================================
+
+flowchart TD
+    subgraph MarketData ["📡 1. NGUỒN DỮ LIỆU THỊ TRƯỜNG (MT5)"]
+        MT5_Feed["Sàn MetaTrader 5 (MT5)<br/>- Nến D1 (Daily OHLC)<br/>- Nến H1 (Hourly OHLC)<br/>- Giá Bid/Ask thời gian thực"]
+    end
+
+    subgraph EyesEngine ["🔧 2. BỘ MÁY TÍNH TOÁN 'MẮT' (Eyes Engine)"]
+        direction TB
+        Structure["StructureEngine (D1)<br/>- Pivot Swings & BOS<br/>- Context: UPTREND / DOWNTREND / SIDEWAY"]
+        Signal["SignalEngine (H1)<br/>- Strength Score (0.0 - 1.0)<br/>- DQ Filter (Streak / D1 Wall)"]
+        Snapshot["MarketSnapshot (Nén JSON)<br/>- Gom D1 Context + H1 Signal + Open Orders"]
+        
+        Structure --> Snapshot
+        Signal --> Snapshot
+    end
+
+    subgraph MemoryLayer ["🧠 3. BỘ NHỚ KINH NGHIỆM (Experience DB)"]
+        ExpDB[("experience.db (Dùng chung)<br/>- Lessons & Playbooks<br/>- MemoryPack ≤ 500 tokens")]
+    end
+
+    subgraph BrainAgents ["✅ 4. BỘ NÃO QUYẾT ĐỊNH 'ALL-LLM' (Multi-Agent Consensus)"]
+        direction TB
+        AgentA["Agent A (Strategist)<br/>- Nhận Snapshot + MemoryPack<br/>- Đề xuất TradePlan<br/>(ENTRY / DCA / CLOSE / PAYOFF / WAIT)"]
+        AgentB["Agent B (Challenger & Risk)<br/>- Đánh giá phản biện độc lập<br/>- Bỏ phiếu: APPROVE / CHALLENGE / VETO"]
+        Consensus["Consensus Protocol<br/>- Vòng lặp phản biện ≤ 2 round<br/>- Thống nhất hành động cuối cùng"]
+        
+        AgentA -->|Gửi TradePlan| AgentB
+        AgentB -->|Phản hồi Ballot| Consensus
+        Consensus -.->|Nếu Challenge ≤ 2| AgentA
+    end
+
+    subgraph GuardLayer ["🛡️ 5. NGƯỜI GÁC CỔNG AN TOÀN (HardValidator)"]
+        Validator{"HardValidator (Python code)<br/>1. Matrix action hợp lệ (Context x PUSH >= 0.6)<br/>2. Spacing / Ladder đúng chuẩn<br/>3. Cấm mở ngược hướng rổ (đặc biệt RECOVERY)<br/>4. NormalizeLot theo bước volume broker<br/>5. Kill-switch OFF (SYSTEM_FREEZE check)"}
+    end
+
+    subgraph QueueDB ["📦 6. HÀNG ĐỢI LỆNH ĐỘC QUYỀN (Local SQLite DB)"]
+        OrderQueue[("dca_symbol.db<br/>Bảng: MarketOrderInfo<br/>Trạng thái: PENDING")]
+    end
+
+    subgraph ExecutorLayer ["⚙️ 7. ĐÔI TAY THỰC THI (Queue Executor Worker)"]
+        Executor["Order Executor Worker<br/>- Atomic Claim: PENDING ➔ PROCESSING<br/>- Gửi OrderSend() sang MT5<br/>- Lưu OrderArchive & Cập nhật PairState"]
+    end
+
+    subgraph FeedbackLoop ["🔄 8. VÒNG LẶP HỌC HỎI (Experience Feedback)"]
+        Evaluator["Trade Evaluator<br/>- Đánh giá lệnh sau khi đóng (P&L)<br/>- Rút bài học mới (AVOID/PREFER/WARNING)"]
+    end
+
+    %% Luồng kết nối chính
+    MT5_Feed -->|Lấy nến D1/H1| EyesEngine
+    Snapshot -->|Inject Context| AgentA
+    Snapshot -->|Inject Context| AgentB
+    ExpDB -->|Bơm MemoryPack| AgentA
+    ExpDB -->|Bơm MemoryPack| AgentB
+
+    Consensus -->|Plan được duyệt| Validator
+    Validator -->|Hợp lệ: Ghi hàng đợi| OrderQueue
+    Validator -.->|Vi phạm: Từ chối & Alert| Evaluator
+
+    OrderQueue -->|Atomic Claim & Lock| Executor
+    Executor -->|Bắn lệnh thật| MT5_Feed
+    Executor -->|Ghi nhận kết quả| FeedbackLoop
+    FeedbackLoop -->|Cập nhật bài học| ExpDB
+
+    %% Định dạng màu sắc trực quan
+    classDef market fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
+    classDef engine fill:#fff3e0,stroke:#f57c00,stroke:#fff,color:#e65100;
+    classDef brain fill:#e8f5e9,stroke:#388e3c,stroke:#fff,color:#1b5e20;
+    classDef guard fill:#ffebee,stroke:#d32f2f,stroke:#fff,color:#b71c1c;
+    classDef db fill:#f3e5f5,stroke:#7b1fa2,stroke:#fff,color:#4a148c;
+    classDef exec fill:#ede7f6,stroke:#512da8,stroke:#fff,color:#311b92;
+
+    class MT5_Feed market;
+    class Structure,Signal,Snapshot engine;
+    class AgentA,AgentB,Consensus brain;
+    class Validator guard;
+    class ExpDB,OrderQueue db;
+    class Executor exec;

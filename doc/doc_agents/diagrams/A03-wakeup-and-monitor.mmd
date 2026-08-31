@@ -1,25 +1,34 @@
-%% A03 — Wakeup and monitor flowchart
-%% Spec: 05-scheduler-wakeup
+%% A03 — Wakeup and monitor flowchart (Per-Instance Scheduler)
+%% Spec: 05-scheduler-wakeup.md, ERRATA.md (ALL-LLM, DEC-08, DEC-09)
 
 flowchart TD
-  Start([Orchestrator_loop]) --> Wait{"Wait_for_event"}
+  Start([Orchestrator_Loop_per_Symbol]) --> Wait{"Wait_for_event"}
   Wait -->|"timer_next_wake_at"| AutoWake[session_mode_AUTO]
   Wait -->|"BossWake"| BossInt["session_mode_BOSS\ncancel_sleep_wake_A_and_B"]
-  Wait -->|"KillSwitch"| Kill[Emergency_path]
+  Wait -->|"LLM_Outage"| FreezeMode["SYSTEM_FREEZE_active\nhold_positions_alert_Boss"]
+  Wait -->|"KillSwitch"| Kill[Emergency_manual_path]
 
-  AutoWake --> RunCycle[Run_consensus_cycle]
+  AutoWake --> RunCycle["Run_A2A_Consensus_Cycle\nAgent_A_plus_Agent_B"]
   BossInt --> RunCycle
-  Kill --> EndKill([Handle_flatten_or_pause])
+  FreezeMode --> AutoResumeCheck{"LLM_recovered?"}
+  AutoResumeCheck -->|Yes| LightRec["Auto_Resume_plus_Light_Reconcile\nSync_MT5_vs_PairState"]
+  LightRec --> RunCycle
+  AutoResumeCheck -->|No| SleepFreeze[sleep_retry_backoff]
+  SleepFreeze --> Wait
+  Kill --> EndKill([Handle_manual_flatten_or_pause])
 
   RunCycle --> After{"PairState_after_cycle?"}
-  After -->|FLAT| FlatH1{"ElapsedInH1_ge_30m?"}
-  FlatH1 -->|Yes_C1| WakeC1["WakeRequest_now_plus_30m_REQUIRED"]
-  FlatH1 -->|No_C2| WakeC2["WakeRequest_H1_open_plus_30m"]
+  
+  After -->|FLAT| FlatRule{"Scheduler_FLAT_rules"}
+  FlatRule -->|"C0_MANDATORY_DEFAULT"| WakeC0["WakeRequest_C0\nnext_wake_at_eq_H1_close_plus_2s\nREQUIRED_on_every_H1_bar"]
+  FlatRule -->|"C1_auxiliary_Elapsed_ge_30m"| WakeC1["WakeRequest_C1_now_plus_30m"]
+  FlatRule -->|"C2_auxiliary_Elapsed_lt_30m"| WakeC2["WakeRequest_C2_H1_open_plus_30m"]
 
-  After -->|NORMAL_or_RECOVERY| Dyn["AgentA_chooses_dynamic_interval\nclamp_WakeMin_3m_WakeMax_60m\nbased_on_volatility_PnL_spacing_H1_close"]
-  Dyn --> WakeC3[WakeRequest_C3]
+  After -->|NORMAL_or_RECOVERY| Dyn["Agent_A_sets_C3_dynamic_interval\nclamp_WakeMin_3m_WakeMax_60m\nEvaluated_per_wake_if_spacing_met_DCA_now"]
+  Dyn --> WakeC3["WakeRequest_C3_dynamic\nOn_each_wake_assess_DCA_if_spacing_met"]
 
-  WakeC1 --> Sleep[sleep_until_next_wake_at]
+  WakeC0 --> Sleep[sleep_until_next_wake_at]
+  WakeC1 --> Sleep
   WakeC2 --> Sleep
   WakeC3 --> Sleep
   Sleep --> Wait

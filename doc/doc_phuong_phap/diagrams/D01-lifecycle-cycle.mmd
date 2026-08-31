@@ -1,16 +1,12 @@
-%% D01 — Lifecycle cycle per H1 close (Trading Agent DCA MT5)
-%% Spec refs: 01-overview, 02-context, 03-signal, 04-matrix, 05-capital, 06-state
+%% D01 — Lifecycle cycle per H1 close & dynamic wake (Trading Agent DCA MT5)
+%% Spec refs: 01-overview, 02-context, 03-signal, 04-matrix, 05-capital, 06-state, ERRATA.md (ALL-LLM, DEC-09)
 %% Conventions: no spaces in node IDs; labels with () or : wrapped in quotes
 
 flowchart TD
-  Start([OnTick_or_OnTimer]) --> KillGate{"KillSwitch_or_KillFlatten?"}
-  KillGate -->|"KillFlatten"| FlattenAll["CLOSE_ALL_EA_positions -> all_FLAT"]
-  KillGate -->|"Pause_only"| PauseNote["Skip_new_opens_continue_manage_optional"]
-  KillGate -->|"No"| SymLoop["For_each_Symbol_AUDCAD_AUDNZD_GBPUSD_NZDCAD"]
-
-  SymLoop --> NewH1{"NewBar_H1?\niTime_H1_0_changed"}
-  NewH1 -->|No| EndTick([End_cycle_symbol])
-  NewH1 -->|Yes| ReadBars["Read_closed_bars_only\nH1_shift1_and_D1_shift1"]
+  Start([Wake_Event_H1Close_or_C3Timer]) --> KillGate{"KillSwitch_or_KillFlatten?"}
+  KillGate -->|"KillFlatten"| FlattenAll["Manual_Boss_CLOSE_ALL_positions -> all_FLAT"]
+  KillGate -->|"Pause_only"| PauseNote["Skip_new_actions_continue_monitor"]
+  KillGate -->|"No"| ReadBars["Read_closed_bars_only\nH1_shift1_and_D1_shift1"]
 
   ReadBars --> CtxEng["StructureEngine_D1\nswings_radius_3_features_BOS"]
   CtxEng --> CtxRule["RuleClassify_HH_HL_or_LH_LL_or_SIDEWAY"]
@@ -18,66 +14,78 @@ flowchart TD
   CtxHyst -->|No| CtxKeep[Context_PrevContext]
   CtxHyst -->|Yes| CtxCand[Context_candidate]
   CtxKeep --> CtxRails
-  CtxCand --> CtxRails["SAFETY_RAILS_plus_optional_LLM_clamp"]
+  CtxCand --> CtxRails["SAFETY_RAILS_plus_LLM_narrative_clamp"]
   CtxRails --> CtxOut[ContextFinal]
   CtxOut --> SigEng
 
-  SigEng["H1_StrengthScore_Eyes\nmom_0.4_str_0.3_loc_0.2_conf_0.1_plus_DQ"] --> SigRails["SAFETY_RAILS_optional_LLM\nstrength_final_verdict"]
+  SigEng["H1_StrengthScore_Eyes\nmom_0.4_str_0.3_loc_0.2_conf_0.1_plus_DQ"] --> SigRails["SAFETY_RAILS_and_LLM_verdict\nstrength_final_verdict"]
   SigRails --> PushQ{"strength_final_ge_0.6?"}
   PushQ -->|No| HasNone[Signal_NEUTRAL_or_weak]
   PushQ -->|Yes| Verd{verdict?}
   Verd -->|PUSH_UP| HasUp[Signal_PUSH_UP]
   Verd -->|PUSH_DOWN| HasDn[Signal_PUSH_DOWN]
   Verd -->|EXHAUSTION_or_NEUTRAL| HasNone
-  HasNone --> StateBr
-  HasUp --> StateBr
-  HasDn --> StateBr
+  HasNone --> BuildSnap
+  HasUp --> BuildSnap
+  HasDn --> BuildSnap
 
-  StateBr{"Pair_State?"} -->|FLAT| FlatPath
+  BuildSnap["Engine_builds_MarketSnapshot\nIncludes_spacing_met_basket_status"] --> StateBr{"Pair_State?"}
+
+  StateBr -->|FLAT| FlatPath
   StateBr -->|NORMAL| NormPath
   StateBr -->|RECOVERY| RecPath
 
   FlatPath["FLAT_path"] --> Matrix{"DecisionMatrix_Context_x_Push"}
-  Matrix -->|"UPTREND_x_PUSH_DOWN"| ActBuy[Action_OPEN_BUY]
-  Matrix -->|"DOWNTREND_x_PUSH_UP"| ActSell[Action_OPEN_SELL]
-  Matrix -->|"SIDEWAY_x_PUSH_UP"| ActSell2[Action_OPEN_SELL]
-  Matrix -->|"SIDEWAY_x_PUSH_DOWN"| ActBuy2[Action_OPEN_BUY]
-  Matrix -->|"Else_WAIT"| ActWait[Action_WAIT]
-  ActBuy --> FlatGates
-  ActSell --> FlatGates
-  ActBuy2 --> FlatGates
-  ActSell2 --> FlatGates
-  ActWait --> UpdateState
-  FlatGates{"CooldownOK_AND_GlobalLockOK_AND_MarginOK?"} -->|Yes| OpenBegin["MARKET_BeginLot_L0_0.05\nBasketDir_set_State_NORMAL"]
-  FlatGates -->|No| UpdateState
-  OpenBegin --> UpdateState
+  Matrix -->|"UPTREND_x_PUSH_DOWN"| PlanBuy["Agent_A_proposes_OPEN_BUY"]
+  Matrix -->|"DOWNTREND_x_PUSH_UP"| PlanSell["Agent_A_proposes_OPEN_SELL"]
+  Matrix -->|"SIDEWAY_x_PUSH_UP"| PlanSell2["Agent_A_proposes_OPEN_SELL"]
+  Matrix -->|"SIDEWAY_x_PUSH_DOWN"| PlanBuy2["Agent_A_proposes_OPEN_BUY"]
+  Matrix -->|"Else_WAIT"| PlanWait["Agent_A_proposes_WAIT"]
+  PlanBuy --> ConsensusFlat
+  PlanSell --> ConsensusFlat
+  PlanBuy2 --> ConsensusFlat
+  PlanSell2 --> ConsensusFlat
+  PlanWait --> UpdateState
+
+  ConsensusFlat{"Agent_B_Ballot_and_Consensus?"} -->|APPROVE| FlatHV{"HardValidator_PASS?\nCooldown_GlobalLock_Margin_Matrix"}
+  ConsensusFlat -->|VETO_or_DEFER| UpdateState
+  FlatHV -->|Yes| EnqOpen["Agent_A_ENQUEUE_MarketOrderInfo_PENDING\nExecutor_OrderSend_BeginLot_L0\nState_NORMAL_BasketDir_set"]
+  FlatHV -->|No| UpdateState
+  EnqOpen --> UpdateState
 
   NormPath["NORMAL_TotalLot_lt_R_TH"] --> NormRefresh{"Refresh_TotalLot"}
   NormRefresh -->|"TotalLot_eq_0"| ToFlat1[State_FLAT_desync]
   NormRefresh -->|"TotalLot_ge_R_TH_0.3"| ToRec1["State_RECOVERY_alert_ENTER"]
-  NormRefresh -->|"still_NORMAL"| NormTP{"FavorableSqueeze_AND_BasketProfit_ge_TpMoney?\nTpMoney_eq_f_TP_Pips_x_TotalLot"}
-  NormTP -->|Yes| CloseAll["CLOSE_ALL -> State_FLAT_set_Cooldown"]
-  NormTP -->|No| NormDca{"Adverse_price_ge_Spacing?\nBUY_Bid_le_AdvRef_minus_Sp\nSELL_Ask_ge_AdvRef_plus_Sp\nSp_eq_max_S_MIN_Coef_x_ATR_pips"}
-  NormDca -->|Yes| DoDca["DCA_same_dir_Lot_LadderStep_plus_1"]
-  NormDca -->|No| UpdateState
-  DoDca --> AfterDca{"TotalLot_ge_R_TH?"}
+  NormRefresh -->|"still_NORMAL"| NormAction{"Evaluate_BasketTP_or_DCA"}
+
+  NormAction -->|"FavorableSqueeze_and_BasketProfit_ge_TpMoney"| PlanClose["Agent_A_proposes_CLOSE_ALL\nAgent_B_ballot"]
+  PlanClose --> ConsClose{"A_plus_B_Consensus?"}
+  ConsClose -->|APPROVE| EnqClose["HardPass -> ENQUEUE_CLOSE_ALL\nExecutor_closes_all -> State_FLAT"]
+  ConsClose -->|VETO| UpdateState
+  EnqClose --> UpdateState
+
+  NormAction -->|"C3_wake_or_H1close_and_spacing_met"| PlanDca["Agent_A_proposes_DCA\nAgent_B_ballot_AVOID_check"]
+  PlanDca --> ConsDca{"A_plus_B_Consensus?"}
+  ConsDca -->|APPROVE| DcaHV{"HardValidator_PASS?\nspacing_ok_NormalizeLot_killswitch"}
+  ConsDca -->|VETO| UpdateState
+  DcaHV -->|Yes| EnqDca["ENQUEUE_DCA_PENDING\nExecutor_OrderSend_same_BasketDir\nLot_L0_plus_k_x_0.05_Ladder_plus_1"]
+  DcaHV -->|No| UpdateState
+  EnqDca --> AfterDca{"TotalLot_ge_R_TH_0.3?"}
   AfterDca -->|Yes| ToRec2["State_RECOVERY_alert_ENTER"]
   AfterDca -->|No| UpdateState
   ToFlat1 --> UpdateState
   ToRec1 --> UpdateState
-  CloseAll --> UpdateState
-  ToRec2 --> UpdateState
 
-  RecPath["RECOVERY_loop_see_D03"] --> RecCall["Run_RecoveryActivity\nAdverse_DCA_or_Favorable_PayoffReduce"]
-  RecCall --> RecZero{"TotalLot_eq_0?"}
+  RecPath["RECOVERY_loop_see_D03"] --> RecCall["Agent_A_and_B_Consensus\nAdverse_DCA_or_Favorable_PayoffReduce"]
+  RecCall --> RecHV{"HardValidator_PASS?"}
+  RecHV -->|Yes| EnqRec["ENQUEUE_RECOVERY_ACTION\nExecutor_OrderSend_or_Reduce"]
+  RecHV -->|No| UpdateState
+  EnqRec --> RecZero{"TotalLot_eq_0?"}
   RecZero -->|Yes| ToFlat2["State_FLAT_alert_EXIT_RECOVERY"]
   RecZero -->|No| StayRec[Remain_RECOVERY]
   ToFlat2 --> UpdateState
   StayRec --> UpdateState
 
-  UpdateState["Persist_PrevContext_State_AdverseRef_LadderStep"] --> EndTick
-  FlattenAll --> EndAll([End_tick])
-  PauseNote --> SymLoop
-  EndTick --> MoreSym{"More_symbols?"}
-  MoreSym -->|Yes| SymLoop
-  MoreSym -->|No| EndAll
+  UpdateState["Persist_PrevContext_State_AdverseRef_LadderStep\nSet_Next_WakeRequest_C0_C1_C2_or_C3"] --> EndCycle([End_Cycle])
+  FlattenAll --> EndAll([End_Emergency])
+  PauseNote --> EndCycle

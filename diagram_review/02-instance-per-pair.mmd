@@ -1,0 +1,72 @@
+%% ============================================================================
+%% SƠ ĐỒ MULTI-PROCESS PER-PAIR (ADR-001)
+%% Mỗi cặp tiền chạy 1 OS Process độc lập, sở hữu DB riêng
+%% Dùng chung experience.db qua SQLite WAL mode
+%% ============================================================================
+
+flowchart LR
+    subgraph Instance_AUDCAD ["🖥️ Process 1: AUDCAD (PID: 10241)"]
+        direction TB
+        CMD1["CLI: python main.py --symbol AUDCAD"]
+        Sched1["Asyncio Scheduler"]
+        Eyes1["Eyes Engine (AUDCAD)"]
+        Agents1["Agents A & B (Session AUDCAD)"]
+        Exec1["Executor Worker"]
+        DB1[("dca_audcad.db<br/>(9 Tables Local)")]
+
+        CMD1 --> Sched1
+        Sched1 --> Eyes1 --> Agents1 --> DB1 --> Exec1
+    end
+
+    subgraph Instance_AUDNZD ["🖥️ Process 2: AUDNZD (PID: 10242)"]
+        direction TB
+        CMD2["CLI: python main.py --symbol AUDNZD"]
+        Sched2["Asyncio Scheduler"]
+        Eyes2["Eyes Engine (AUDNZD)"]
+        Agents2["Agents A & B (Session AUDNZD)"]
+        Exec2["Executor Worker"]
+        DB2[("dca_audnzd.db<br/>(9 Tables Local)")]
+
+        CMD2 --> Sched2
+        Sched2 --> Eyes2 --> Agents2 --> DB2 --> Exec2
+    end
+
+    subgraph Instance_NZDCAD ["🖥️ Process 3: NZDCAD (PID: 10243)"]
+        direction TB
+        CMD3["CLI: python main.py --symbol NZDCAD"]
+        Sched3["Asyncio Scheduler"]
+        Eyes3["Eyes Engine (NZDCAD)"]
+        Agents3["Agents A & B (Session NZDCAD)"]
+        Exec3["Executor Worker"]
+        DB3[("dca_nzdcad.db<br/>(9 Tables Local)")]
+
+        CMD3 --> Sched3
+        Sched3 --> Eyes3 --> Agents3 --> DB3 --> Exec3
+    end
+
+    subgraph SharedExperience ["🧠 CƠ SỞ DỮ LIỆU DÙNG CHUNG (SHARED DB)"]
+        SharedDB[("experience.db<br/>(SQLite WAL Mode)<br/>- 4 Tables: Symbol Profiles, Lessons, Runs, Feedback<br/>- Truy cập an toàn đa tiến trình (Timeout 5.0s)")]
+    end
+
+    subgraph MT5_Terminal ["🏦 NỀN TẢNG GIAO DỊCH META TRADER 5"]
+        MT5["MT5 Terminal API<br/>(Hỗ trợ đa luồng / IPC)"]
+    end
+
+    %% Tương tác với Shared DB
+    Agents1 <-->|Đọc MemoryPack & Ghi Lesson| SharedDB
+    Agents2 <-->|Đọc MemoryPack & Ghi Lesson| SharedDB
+    Agents3 <-->|Đọc MemoryPack & Ghi Lesson| SharedDB
+
+    %% Tương tác với MT5
+    Exec1 -->|"OrderSend AUDCAD"| MT5
+    Exec2 -->|"OrderSend AUDNZD"| MT5
+    Exec3 -->|"OrderSend NZDCAD"| MT5
+
+    %% Styling
+    classDef proc fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px,color:#1a237e;
+    classDef shared fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#004d40;
+    classDef mt5 fill:#fbe9e7,stroke:#d84315,stroke-width:2px,color:#bf360c;
+
+    class Instance_AUDCAD,Instance_AUDNZD,Instance_NZDCAD proc;
+    class SharedDB shared;
+    class MT5 mt5;

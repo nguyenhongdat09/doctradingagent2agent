@@ -1,0 +1,35 @@
+%% ============================================================================
+%% KÊNH THAM VẤN CỦA BOSS (BOSS CHANNEL - ADVISORY ONLY)
+%% Trách nhiệm: 👤 Boss chỉ góp ý góc nhìn, ✅ LLM + 🛡️ Validator giữ quyền quyết định
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+    actor Boss as 👤 Boss (Quản trị viên)
+    participant Channel as 💬 Boss Channel (Telegram/CLI)
+    participant AgentA as 🧠 Agent A (Strategist)
+    participant AgentB as 🧐 Agent B (Challenger)
+    participant Validator as 🛡️ HardValidator
+    participant Queue as 📦 SQLite Queue
+
+    Note over Boss,Queue: 👤 BOSS CHỈ ADVISORY (GÓP Ý) - TUYỆT ĐỐI KHÔNG OVERRIDE - KHÔNG CÓ ORDERSEND TRỰC TIẾP
+    
+    Boss->>Channel: Gửi chỉ đạo/Góc nhìn (vd: "Tối nay có tin Non-Farm, cẩn thận")
+    Channel->>AgentA: Inject ý kiến Boss vào Prompt ngữ cảnh
+    Channel->>AgentB: Inject ý kiến Boss vào Prompt ngữ cảnh
+
+    loop Cuộc Hội Đàm 3 Bên (Tối đa 12 Turns)
+        AgentA->>AgentB: Đề xuất phương án thích ứng (Kèm tham chiếu ý kiến Boss)
+        AgentB->>AgentA: Phản biện rủi ro và xác nhận độ an toàn
+    end
+
+    AgentA->>Validator: Xuất TradePlan hoàn chỉnh sau hội đàm (Chỉ LLM A lập plan & LLM B duyệt)
+    
+    alt 5/5 Quy tắc an toàn ĐẠT CHUẨN
+        Validator->>Queue: INSERT INTO MarketOrderInfo (status='PENDING')
+        Queue-->>Channel: Thông báo: "Kế hoạch đã vào hàng đợi thành công"
+        Channel-->>Boss: Gửi báo cáo xác nhận qua Telegram
+    else Vi phạm quy tắc an toàn (Lot quá lớn / Spacing thiếu)
+        Validator-->>Channel: CẢNH BÁO: Kế hoạch bị từ chối do vi phạm an toàn
+        Channel-->>Boss: Thông báo: "Ý kiến chưa hợp lệ với quy chuẩn kỹ thuật"
+    end

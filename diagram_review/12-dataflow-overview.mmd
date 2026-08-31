@@ -1,0 +1,76 @@
+%% ============================================================================
+%% SƠ ĐỒ LUỒNG DỮ LIỆU & QUAN HỆ 13 BẢNG SQLITE (DATAFLOW & DB SCHEMA)
+%% Trách nhiệm: 📦 9 Bảng Local (dca_symbol.db) + 🧠 4 Bảng Shared (experience.db)
+%% ============================================================================
+
+flowchart LR
+    subgraph ExternalServices ["🌐 DỊCH VỤ NGOÀI"]
+        MT5["MetaTrader 5 Terminal<br/>(Dữ liệu nến & Khớp lệnh)"]
+        LLM_API["LLM Provider (OpenAI / Anthropic / Gemini)<br/>(Trí tuệ nhân tạo)"]
+    end
+
+    subgraph MemoryShared ["🧠 SHARED DB: experience.db (4 Bảng)"]
+        direction TB
+        T_SP["1. symbol_profiles: Hồ sơ cặp tiền & winrate"]
+        T_LS["2. lessons: Ngân hàng bài học (AVOID/PREFER)"]
+        T_LF["3. lesson_feedbacks: Đánh giá độ hữu ích bài học"]
+        T_LR["4. llm_runs: Quản lý token & chi phí USD toàn cục"]
+    end
+
+    subgraph InstanceLocal ["📦 LOCAL DB: dca_symbol.db (9 Bảng)"]
+        direction TB
+        T_PS["1. pair_state: Trạng thái (FLAT/NORMAL/RECOVERY)"]
+        T_Q["2. MarketOrderInfo: Hàng đợi lệnh PENDING/PROCESSING"]
+        T_OO["3. open_orders: Vé lệnh đang chạy trên sàn"]
+        T_OA["4. order_archive: Lịch sử các lệnh đã chốt sổ"]
+        T_MS["5. market_snapshots: Lịch sử nến D1/H1 đã nén"]
+        T_TP["6. trade_plans: Kế hoạch của Agent A"]
+        T_RB["7. review_ballots: Phiếu phản biện của Agent B"]
+        T_SF["8. system_flags: Cờ đóng băng SYSTEM_FREEZE"]
+        T_AL["9. audit_logs: Nhật ký sự kiện chi tiết"]
+    end
+
+    subgraph CoreEngine ["⚙️ APPLICATION ENGINE (Python)"]
+        Eyes["Eyes Engine<br/>(Mắt tính toán)"]
+        Agents["Agent A & B<br/>(Não bộ LLM)"]
+        Validator["HardValidator<br/>(Người gác cổng)"]
+        Executor["Queue Executor<br/>(Đôi tay thực thi)"]
+        Evaluator["Trade Evaluator<br/>(Bộ rút kinh nghiệm)"]
+    end
+
+    %% Luồng đọc ghi
+    MT5 -->|OHLCV Nến| Eyes
+    Eyes -->|Ghi Cache| T_MS
+    Eyes -->|Cấp Snapshot| Agents
+
+    T_SP & T_LS -->|Bơm MemoryPack| Agents
+    Agents <-->|Gửi Prompt & Nhận JSON| LLM_API
+    Agents -->|Ghi Lịch Sử| T_TP & T_RB
+    Agents -->|Ghi Chi Phí Token| T_LR
+
+    Agents -->|Đề xuất Plan| Validator
+    Validator -->|Kiểm tra cờ| T_SF
+    Validator -->|Kiểm tra trạng thái| T_PS
+    Validator -->|Thỏa mãn: Ghi hàng đợi| T_Q
+
+    T_Q -->|Atomic Claim| Executor
+    Executor -->|OrderSend| MT5
+    Executor -->|"Ghi nhận lệnh mở"| T_OO
+    Executor -->|"Cập nhật Mode / TotalLot"| T_PS
+
+    MT5 -->|Sự kiện đóng lệnh| Evaluator
+    Evaluator -->|Chuyển sang Archive| T_OA
+    Evaluator -->|Ghi nhận bài học mới| T_LS
+    Evaluator -->|Cập nhật Feedback| T_LF
+    Evaluator -->|Cập nhật Profile| T_SP
+
+    %% Styling
+    classDef ext fill:#eceff1,stroke:#607d8b,stroke-width:2px,color:#263238;
+    classDef shared fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#004d40;
+    classDef local fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
+    classDef core fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+
+    class MT5,LLM_API ext;
+    class T_SP,T_LS,T_LF,T_LR shared;
+    class T_PS,T_Q,T_OO,T_OA,T_MS,T_TP,T_RB,T_SF,T_AL local;
+    class Eyes,Agents,Validator,Executor,Evaluator core;

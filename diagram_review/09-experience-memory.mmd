@@ -1,0 +1,61 @@
+%% ============================================================================
+%% BỘ NHỚ KINH NGHIỆM & QUẢN TRỊ TOKEN (EXPERIENCE MEMORY)
+%% Trách nhiệm: 🧠 Đúc kết bài học & đóng gói MemoryPack <= 500 tokens
+%% ============================================================================
+
+flowchart TD
+    subgraph TradeCompletion ["💰 1. KẾT THÚC VỊ THẾ GIAO DỊCH"]
+        ClosedTrade["Lệnh giao dịch được đóng<br/>(Take-Profit hoặc Cắt lỗ Payoff)"]
+        Evaluator["Trade Evaluator<br/>- Phân tích P&L thực tế<br/>- Đối chiếu với lý do vào lệnh ban đầu"]
+        
+        ClosedTrade --> Evaluator
+    end
+
+    subgraph LessonExtraction ["📝 2. ĐÚC KẾT BÀI HỌC VÀ LƯU TRỮ"]
+        ClassifyLesson["Phân loại Bài học:<br/>- AVOID: Bẫy giá cần tránh<br/>- PREFER: Mô hình tỷ lệ thắng cao<br/>- WARNING: Cảnh báo tin tức / biến động"]
+        DedupeEngine["Deduplication Engine<br/>- Chống trùng lặp bài học<br/>- Cập nhật trọng số tin cậy"]
+        ExpDB[("experience.db (SQLite WAL)<br/>- symbol_profiles<br/>- lessons<br/>- lesson_feedbacks<br/>- llm_runs")]
+        
+        Evaluator --> ClassifyLesson --> DedupeEngine --> ExpDB
+    end
+
+    subgraph MemoryPackBuilder ["📦 3. ĐÓNG GÓI BỘ NHỚ (MemoryPack Builder <= 500 Tokens)"]
+        TriggerBuild["Truy vấn MemoryPack cho nhịp phân tích mới"]
+        
+        subgraph TierBudget ["Phân Bổ Ngân Sách Token Nghiêm Ngặt"]
+            Tier1["Tier 1: Symbol Profile (<= 150 Tokens)<br/>- Đặc tính cặp tiền, ATR trung bình, Win rate gần nhất"]
+            Tier2["Tier 2: Top 6 Lessons (<= 350 Tokens)<br/>- 6 bài học phù hợp nhất với bối cảnh thị trường hiện tại"]
+        end
+
+        PackOutput["MemoryPack (Tối đa 500 Tokens)<br/>- Nhỏ gọn, súc tích, cực kỳ rẻ chi phí API"]
+
+        ExpDB --> TriggerBuild --> TierBudget
+        Tier1 & Tier2 --> PackOutput
+    end
+
+    subgraph PromptInjection ["🧠 4. BƠM VÀO NGỮ CẢNH LLM"]
+        AgentA["Agent A Prompt Context"]
+        AgentB["Agent B Prompt Context"]
+        
+        PackOutput --> AgentA
+        PackOutput --> AgentB
+    end
+
+    subgraph FeedbackLoop ["🔄 5. ĐÁNH GIÁ ĐỘ HIỆU QUẢ CỦA BÀI HỌC"]
+        FeedbackRec["Ghi nhận LessonFeedback<br/>- Bài học này có giúp quyết định đúng không?<br/>- Tăng/giảm điểm uy tín bài học"]
+        
+        AgentA -.-> FeedbackRec
+        AgentB -.-> FeedbackRec
+        FeedbackRec --> ExpDB
+    end
+
+    %% Styling
+    classDef step1 fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
+    classDef step2 fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+    classDef step3 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef step4 fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
+
+    class ClosedTrade,Evaluator step1;
+    class ClassifyLesson,DedupeEngine,ExpDB step2;
+    class TriggerBuild,Tier1,Tier2,PackOutput step3;
+    class AgentA,AgentB,FeedbackRec step4;

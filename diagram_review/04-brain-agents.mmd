@@ -1,0 +1,75 @@
+%% ============================================================================
+%% BỘ NÃO QUYẾT ĐỊNH "ALL-LLM" & CONSENSUS PROTOCOL
+%% Trách nhiệm: ✅ Quyết định tối cao (Agent A & B) + 🛡️ Người gác cổng (HardValidator)
+%% ============================================================================
+
+flowchart TD
+    subgraph InputData ["📥 ĐẦU VÀO CỦA NÃO BỘ"]
+        Snap["MarketSnapshot (JSON)<br/>- D1 Context, H1 Signal, Open Basket"]
+        Mem["MemoryPack (<= 500 Tokens)<br/>- Tier 1: Symbol Profile (150t)<br/>- Tier 2: Top 6 Bài học liên quan (350t)"]
+    end
+
+    subgraph AgentA_Block ["🧠 AGENT A (Chiến Lược Gia - Strategist)"]
+        PromptA["Prompt Agent A<br/>- Phân tích rủi ro & cơ hội<br/>- Đề xuất kế hoạch giao dịch"]
+        Plan["TradePlan (Structured JSON)<br/>- action: ENTRY | DCA | CLOSE | PAYOFF | WAIT<br/>- direction: BUY | SELL<br/>- lot_size: float (vd 0.05)<br/>- rationale: string (Lý do vào lệnh)"]
+        
+        PromptA --> Plan
+    end
+
+    subgraph AgentB_Block ["🧐 AGENT B (Phản Biện & Quản Trị Rủi Ro)"]
+        PromptB["Prompt Agent B<br/>- Đọc độc lập Snapshot + MemoryPack<br/>- Tìm lỗ hổng, bẫy giá trong đề xuất của A"]
+        Ballot["ReviewBallot (Structured JSON)<br/>- vote: APPROVE | CHALLENGE | VETO<br/>- counter_evidence: string (Bằng chứng phản bác)<br/>- risk_score: int (1 - 10)"]
+        
+        PromptB --> Ballot
+    end
+
+    subgraph ConsensusProtocol ["🤝 GIAO THỨC ĐỒNG THUẬN (Consensus Loop)"]
+        CheckVote{Kết quả Ballot của Agent B?}
+        RoundCheck{Số vòng Challenge <= 2?}
+        FallbackWait["HỦY KẾ HOẠCH ➔ HÀNH ĐỘNG: WAIT<br/>(Bảo toàn vốn là ưu tiên số 1)"]
+    end
+
+    subgraph HardValidatorBlock ["🛡️ NGƯỜI GÁC CỔNG KỸ THUẬT (HardValidator - Python)"]
+        Rule1["1. Matrix Action Check: Context x PUSH >= 0.6 hợp lệ"]
+        Rule2["2. Spacing / Ladder Check: Đạt chuẩn Spacing động ATR"]
+        Rule3["3. Basket Direction Check: Cấm mở ngược hướng rổ (đặc biệt RECOVERY)"]
+        Rule4["4. NormalizeLot Check: Đúng bước nhảy volume của broker"]
+        Rule5["5. Kill-Switch Check: SYSTEM_FREEZE đang OFF"]
+        
+        ValPass["HỢP LỆ TOÀN DIỆN<br/>(Pass 5/5 Rule)"]
+        ValFail["VI PHẠM QUY TẮC AN TOÀN<br/>(Chặn Hallucination & Alert)"]
+    end
+
+    subgraph OutputQueue ["📦 ĐƯA VÀO HÀNG ĐỢI THỰC THI"]
+        QueuePush[("Ghi vào SQLite Queue<br/>table: MarketOrderInfo<br/>status: PENDING")]
+    end
+
+    %% Dòng chảy dữ liệu
+    Snap & Mem --> PromptA
+    Snap & Mem --> PromptB
+    Plan --> PromptB
+    Ballot --> CheckVote
+
+    CheckVote -->|APPROVE| HardValidatorBlock
+    CheckVote -->|VETO| FallbackWait
+    CheckVote -->|CHALLENGE| RoundCheck
+
+    RoundCheck -->|"Được phép thử lại: Round 1-2"| PromptA
+    RoundCheck -->|"Quá 2 vòng không đồng thuận"| FallbackWait
+
+    HardValidatorBlock --> Rule1 --> Rule2 --> Rule3 --> Rule4 --> Rule5
+    Rule5 -->|Đạt chuẩn| ValPass --> QueuePush
+    Rule5 -->|Lỗi| ValFail --> FallbackWait
+
+    %% Styling
+    classDef input fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
+    classDef agent fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef loop fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+    classDef guard fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+    classDef queue fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
+
+    class Snap,Mem input;
+    class PromptA,Plan,PromptB,Ballot agent;
+    class CheckVote,RoundCheck,FallbackWait loop;
+    class Rule1,Rule2,Rule3,Rule4,Rule5,ValPass,ValFail guard;
+    class QueuePush queue;
