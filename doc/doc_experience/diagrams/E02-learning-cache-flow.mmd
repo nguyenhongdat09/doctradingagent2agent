@@ -1,0 +1,50 @@
+%% E02-learning-cache-flow.mmd
+%% Luồng học hỏi, tổng hợp bài học, caching và phản hồi (Learning & Cache Flow)
+flowchart TD
+    subgraph TriggerLearn ["1. Sự Kiện Kích Hoạt Rút Kinh Nghiệm"]
+        EvClose["Sự kiện CLOSE_ALL / Basket Profit Đóng"]
+        EvRecExit["Sự kiện Thoát Khỏi Chu Trình RECOVERY"]
+        EvFail["Sự kiện Lệnh FAILED / Vi phạm Safety Rails"]
+        EvCooldown["Kết thúc Chu Kỳ Cooldown"]
+    end
+
+    subgraph LearnerEngine ["2. LessonLearner & Deduplication"]
+        GenLesson["Phân tích Kết Quả PnL & Bối Cảnh (Context, Strength, Spacing)"]
+        CheckDedupe{"Đã tồn tại Lesson cùng\n(symbol + context + action + hash(trigger_cond))?"}
+        IncOcc["Tăng occurrence_count\nCập nhật total_pl_usd, win/loss count, last_seen_at"]
+        InsertNew["INSERT INTO Lessons\n(Status='ACTIVE', Severity=1..5, Template Text)"]
+        Invalidate["Xóa / Vô hiệu hóa MemoryCache liên quan\n(DELETE FROM MemoryCache WHERE symbol=? OR scope='all')"]
+    end
+
+    subgraph CacheEngine ["3. MemoryPackBuilder & Caching (T1 + T2)"]
+        ReqPack["Yêu cầu MemoryPack\nget_memory_pack(symbol, context, action)"]
+        CheckCache{"Cache HIT & Chưa hết TTL\n& Hash không đổi?"}
+        ReturnCache["Trả về MemoryPack Text từ MemoryCache"]
+        
+        BuildT1["Xây dựng Tầng T1 (<= 150 token):\n- Profile cặp từ PairProfiles\n- Top 2 Evergreen Lessons (Severity cao nhất)"]
+        ScoreRank["Tính Điểm Ranking (Tầng T2 <= 350 token):\nScore = severity^2 * (1+log(occ)) * Relevance * TimeDecay"]
+        BuildT2["Chọn Top 6 Lessons theo Score\nRender chuỗi template ngắn gọn"]
+        SaveCache["Ghi Cache mới vào MemoryCache\n(TTL = 3600s, pack_text = T1 + T2)"]
+    end
+
+    subgraph FeedbackLoop ["4. Vòng Lặp Phản Hồi & Thẩm Định"]
+        ApplyPlan["Agent A & B áp dụng MemoryPack vào Plan/Ballot"]
+        ExecOutcome["Kết quả giao dịch thực tế"]
+        RecordFB["Ghi nhận LessonFeedback (applied, outcome WIN/LOSS/FLAT, pl_usd)"]
+        CheckFailCount{"Lesson bị sai lệch / fail liên tiếp >= 3 lần?"}
+        Downgrade["Hạ severity hoặc chuyển status='ARCHIVED' / 'SUPERSEDED'"]
+        KeepActive["Cập nhật chỉ số hiệu quả tích cực"]
+    end
+
+    EvClose & EvRecExit & EvFail & EvCooldown --> GenLesson
+    GenLesson --> CheckDedupe
+    CheckDedupe -->|Trùng khớp| IncOcc --> Invalidate
+    CheckDedupe -->|Mới hoàn toàn| InsertNew --> Invalidate
+
+    ReqPack --> CheckCache
+    CheckCache -->|HIT| ReturnCache
+    CheckCache -->|MISS / Expired| BuildT1 --> ScoreRank --> BuildT2 --> SaveCache --> ReturnCache
+
+    ReturnCache --> ApplyPlan --> ExecOutcome --> RecordFB --> CheckFailCount
+    CheckFailCount -->|Yes| Downgrade --> Invalidate
+    CheckFailCount -->|No| KeepActive

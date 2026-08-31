@@ -1,0 +1,62 @@
+%% E01-experience-er.mmd
+%% Sơ đồ ER Database kinh nghiệm dùng chung (experience.db)
+erDiagram
+    Lessons {
+        INTEGER lesson_id PK
+        TEXT symbol
+        TEXT scope
+        TEXT context_type
+        TEXT action_type
+        TEXT direction
+        TEXT lesson_type
+        INTEGER severity
+        TEXT trigger_cond
+        TEXT lesson_text
+        TEXT tags
+        TEXT src
+        TEXT plan_id
+        INTEGER occurrence_count
+        REAL total_pl_usd
+        INTEGER win_count
+        INTEGER loss_count
+        TEXT status
+        TEXT created_at
+        TEXT last_seen_at
+        TEXT last_applied_at
+    }
+
+    MemoryCache {
+        TEXT cache_key PK
+        TEXT symbol
+        TEXT context_type
+        TEXT action_type
+        TEXT pack_text
+        INTEGER token_estimate
+        TEXT lesson_ids
+        TEXT content_hash
+        INTEGER ttl_seconds
+        TEXT built_at
+        TEXT expires_at
+    }
+
+    PairProfiles {
+        TEXT symbol PK
+        TEXT profile_short
+        TEXT updated_at
+    }
+
+    LessonFeedback {
+        INTEGER feedback_id PK
+        INTEGER lesson_id FK
+        TEXT plan_id
+        TEXT symbol
+        INTEGER applied
+        TEXT outcome
+        REAL pl_usd
+        TEXT note
+        TEXT created_at
+    }
+
+    Lessons ||--o{ LessonFeedback : "được kiểm chứng qua"
+    Lessons }o--o{ MemoryCache : "kết xuất thành"
+    PairProfiles ||--o{ MemoryCache : "đóng góp tầng T1 cho"

@@ -1,0 +1,41 @@
+%% E03-memory-injection.mmd
+%% Sơ đồ Sequence/Flow: Vị trí nạp get_memory_pack() trong vòng đời quyết định A/B
+sequenceDiagram
+    autonumber
+    participant S as Scheduler
+    participant E as Eye Engine (Python)
+    participant Exp as Experience DB (experience.db)
+    participant A as Agent A (Planner)
+    participant B as Agent B (Challenger)
+    participant V as HardValidator
+    participant Q as SQLite Queue (dca_symbol.db)
+
+    S->>E: Kích hoạt chu kỳ nến H1 đóng
+    E->>E: Phân tích nến D1/H1, xác định Context & Strength Score
+    
+    par Nạp Market Snapshot & Memory Pack
+        E->>A: get_market_snapshot()
+        E->>B: get_market_snapshot()
+        Exp->>A: get_memory_pack(symbol, context, action) [<= 500 tokens]
+        Exp->>B: get_memory_pack(symbol, context, action) [<= 500 tokens]
+    end
+
+    Note over A: Agent A đọc MemoryPack:<br/>- Nhận diện các lỗi AVOID trong quá khứ<br/>- Soạn TradePlan né các bẫy quen thuộc
+    A->>B: Gửi TradePlan (kèm danh sách bài học đã đối chiếu)
+
+    Note over B: Agent B đọc MemoryPack độc lập:<br/>- Dùng MemoryPack bắt lỗi Agent A<br/>- Kiểm tra Agent A có vi phạm bài học AVOID nào không?
+    
+    alt Agent A vi phạm bài học AVOID nghiêm trọng
+        B-->>A: ReviewBallot(REVISE, dissent_points="Vi phạm Lesson #X")
+        Note over A: Agent A điều chỉnh TradePlan (Tối đa 2 vòng)
+    else Hợp lệ & Đạt đồng thuận
+        B-->>A: ReviewBallot(APPROVE, counter_evidence="...")
+    end
+
+    A->>V: Trình TradePlan + Ballots
+    alt HardValidator PASS (EnforceTopLessons = false hoặc pass rails)
+        V->>Q: INSERT INTO MarketOrderInfo (status='PENDING')
+        V->>Exp: Ghi nhận LessonFeedback(plan_id, applied=1)
+    else FAIL
+        V->>Exp: Ghi nhận LessonFeedback(plan_id, applied=0, outcome='FAIL')
+    end
