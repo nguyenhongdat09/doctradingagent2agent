@@ -1,32 +1,37 @@
-%% A04 — DCA dual-review loop from order 2+
-%% Spec: 07-dca-dual-review-loop, 08-map-to-phuong-phap
-
+%% A04 — DCA & Position Management dual-review → enqueue → Executor
 flowchart TD
-  Start([Wake_OPEN_C3_or_Boss]) --> Refresh["A_refresh_TotalLot_BasketDir_PnL_State"]
+  Start([Wake_OPEN_C3_intra_bar_or_H1Close]) --> FreezeCheck{"SYSTEM_FREEZE_active?"}
+  FreezeCheck -->|Yes| FreezeWait[FREEZE_hold_positions_alert_Boss]
+  FreezeCheck -->|No| EyeData["Engine_updates_Snapshot\nspacing_met_flag_BasketProfit_TotalLot"]
+
+  EyeData --> Mem["get_memory_pack"]
+  Mem --> Refresh["A_refreshes_context_and_evaluates_options"]
   Refresh --> Zero{"TotalLot_eq_0?"}
-  Zero -->|Yes| Flat["PairState_FLAT\nWakeRequest_C1_or_C2"]
-  Zero -->|No| Assess["A_chart_review\nspacing_squeeze_recovery_rules"]
+  Zero -->|Yes| Flat["PairState_FLAT_Wake_C0_C1_C2"]
 
+  Zero -->|No| Assess["Agent_A_assesses_DCA_or_CLOSE_or_WAIT\n(Evaluated_immediately_on_wake_if_spacing_met)"]
   Assess --> Prop{"proposed_action"}
-  Prop -->|WAIT| BallotWait["Optional_notify_B_or_A_sets_wake_only"]
-  BallotWait --> WakeDyn[A_WakeRequest_C3_dynamic]
 
-  Prop -->|DCA_or_RECOVERY_DCA_or_PAYOFF_or_CLOSE_ALL| Plan["A_publishes_DcaReview_ActionProposal"]
-  Plan --> HV{"HardValidator_PASS?\nspacing_ladder_no_opposite_dir"}
+  Prop -->|WAIT| WakeDyn[A_WakeRequest_C3_dynamic]
+
+  Prop -->|"DCA_or_RECOVERY_or_PAYOFF_or_CLOSE"| HV{"HardValidator_PASS?\nspacing_ladder_NormalizeLot_killswitch"}
   HV -->|No| Fix["A_revise_or_WAIT"]
   Fix --> WakeDyn
-  HV -->|Yes| Brev["B_independent_ballot"]
 
+  HV -->|Yes| Brev["Agent_B_independent_ballot\nchecks_AVOID_lessons_and_risks"]
   Brev --> Dec{"B_decision"}
-  Dec -->|CHALLENGE_round_lt_2| Rev["A_revise_review"]
+  Dec -->|CHALLENGE_round_lt_2| Rev["Agent_A_revises"]
   Rev --> HV
-  Dec -->|APPROVE| Exec["A_OrderSend_or_close_partial"]
-  Dec -->|REJECT_or_exhausted| Defer["DEFER_no_exec"]
+  Dec -->|APPROVE| Enq["Agent_A_INSERT_MarketOrderInfo_PENDING"]
+  Dec -->|VETO| Defer["DEFER_no_enqueue"]
 
-  Exec --> Post["Update_TotalLot_State\nRECOVERY_if_ge_R_TH_0.3"]
+  Enq --> Ex["Executor_claim_PROCESSING_MT5_OrderSend"]
+  Ex --> Post["Update_TotalLot_PairState"]
   Post --> Zero2{"TotalLot_eq_0?"}
-  Zero2 -->|Yes| Flat
+  Zero2 -->|Yes| FlatFb["submit_feedback_record_lesson_optional"]
+  FlatFb --> Flat
   Zero2 -->|No| WakeDyn
   Defer --> WakeDyn
-  WakeDyn --> EndNode([Sleep_until_next_wake])
+  FreezeWait --> EndNode([Sleep_until_next_wake])
+  WakeDyn --> EndNode
   Flat --> EndNode

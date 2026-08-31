@@ -1,6 +1,6 @@
 # 08 — Bảng tham số (Inputs) & Default
 
-Tất cả tham số dưới đây sẽ map sang `input` MQL5 ở phase code. Giai đoạn này chỉ khóa **tên logic + default + miền giá trị**.
+Tất cả tham số dưới đây map sang **config Python engine** (YAML/ENV/dataclass). Giai đoạn này chỉ khóa **tên logic + default + miền giá trị**.
 
 ## 1. Symbols & vận hành
 
@@ -50,6 +50,7 @@ Tất cả tham số dưới đây sẽ map sang `input` MQL5 ở phase code. Gi
 | `InpWStr` | double | `0.3` | Trọng số structure/breakout |
 | `InpWLoc` | double | `0.2` | Trọng số vị trí vùng |
 | `InpWConf` | double | `0.1` | Trọng số xác nhận thân |
+| `InpWLocPenalty` | double | `0.2` | Trần trừ điểm vị trí (= W_Loc) |
 | `InpZoneNearATR` | double | `1.5` | Gần swing D1 ≤ X×ATR_D1 |
 | `InpDqMult` | double | `0.35` | Nhân score khi trúng disqualifier |
 | `InpMaxPushStreak` | int | `4` | DQ: chuỗi nến cùng hướng ≥ 4 |

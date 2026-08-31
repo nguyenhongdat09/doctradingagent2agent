@@ -1,43 +1,60 @@
-%% A01 — Autonomous A2A sequence: wake → plan → ballot → A OrderSend → wake
-%% Spec: 06-entry-flow, 03-consensus-protocol
+%% A01 — A2A sequence: wake → memory → plan → ballot → enqueue → Executor → MT5
+%% Spec: 06-entry-flow, 03-consensus, 07-dca-dual-review-loop, doc_experience
 
 sequenceDiagram
   autonumber
   participant Orch as Orchestrator
-  participant A as AgentA
+  participant Eye as Engine_Eyes
+  participant A as AgentA_Planner
+  participant Exp as ExperienceDB
   participant HV as HardValidator
-  participant B as AgentB
+  participant B as AgentB_Challenger
+  participant Q as MarketOrderInfo_Queue
+  participant EX as Executor_Thread
   participant MT5 as MT5_Broker
 
-  Orch->>A: Wake_AUTO_or_timer
-  Orch->>B: Wake_AUTO
-  A->>A: Observe_D1_H1_Context_Signal
-  A->>A: Draft_TradePlan_ENTRY_or_WAIT
-  alt action_WAIT
-    A->>Orch: WakeRequest_C1_or_C2
-  else action_ENTRY
-    A->>HV: Validate_plan
-    HV-->>A: HardPass_or_Fail
+  Orch->>A: Wake (H1_Close hoặc C3_Dynamic)
+  Orch->>B: Wake_B
+  Eye->>A: MarketSnapshot (swings, strength, spacing_met, basket)
+  Eye->>B: MarketSnapshot (same data)
+  A->>Exp: get_memory_pack(symbol,context,action)
+  Exp-->>A: MemoryPack
+  A->>A: Phân tích D1/H1/Spacing & Draft TradePlan (ENTRY/DCA/PAYOFF/CLOSE/WAIT)
+  
+  alt action == WAIT
+    A->>Orch: WakeRequest (C0/C1/C2 khi FLAT; C3 khi OPEN)
+  else action in [ENTRY, DCA, RECOVERY_DCA, PAYOFF_REDUCE, CLOSE_ALL]
+    A->>HV: Pre-validate HardValidator
     alt HardFail
       A->>Orch: WakeRequest_DEFER
     else HardPass
-      A->>B: TradePlan
-      B->>B: Independent_MarketAssessment
-      B->>A: ReviewBallot
-      alt B_CHALLENGE_and_round_lt_2
-        A->>A: Revise_plan
-        A->>HV: Validate_revised
+      A->>B: Gửi TradePlan
+      B->>Exp: get_memory_pack (độc lập)
+      B->>B: Thẩm định độc lập + tìm counter-evidence
+      B->>A: ReviewBallot (APPROVE | CHALLENGE | VETO)
+      
+      alt B_CHALLENGE (round < 2)
+        A->>A: Revise TradePlan
+        A->>HV: Validate revised
         A->>B: TradePlan_v2
         B->>A: ReviewBallot_v2
       end
+      
       alt B_APPROVE
-        A->>MT5: OrderSend_MARKET_BeginLot
-        MT5-->>A: Fill
-        A->>Orch: ExecutionReport_CONSENSUS_AUTO
-        A->>Orch: WakeRequest_C3_dynamic
-      else B_REJECT_or_exhausted
-        A->>Orch: WakeRequest_C1_or_C2_DEFER
+        A->>Q: INSERT INTO MarketOrderInfo (status='PENDING')
+        EX->>Q: Atomic Claim (status='PROCESSING')
+        EX->>MT5: OrderSend / OrderClose
+        MT5-->>EX: Kết quả khớp lệnh (Ticket / Price / Error)
+        alt Success
+          EX->>Q: Archive record + Delete PENDING
+          EX->>Orch: ExecutionReport (FILLED)
+          A->>Orch: WakeRequest (C3 khi OPEN; C0/C1 khi FLAT)
+        else Fail
+          EX->>Q: Mark FAILED + Alert Boss
+        end
+      else B_VETO / Dissent
+        A->>Orch: WakeRequest_DEFER (không enqueue)
       end
     end
   end
-  Orch->>Orch: sleep_until_next_wake_at
+  Orch->>Orch: Sleep until next_wake_at (hoặc BossWake)

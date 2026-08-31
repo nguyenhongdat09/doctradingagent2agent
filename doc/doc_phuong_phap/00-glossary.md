@@ -87,9 +87,11 @@ ATR_Pips = ATR14_H1 / PipSize
 | `BasketDir` | `BUY`, `SELL`, `NONE` |
 | `Signal` | `PUSH_UP`, `PUSH_DOWN`, `NEUTRAL`, `EXHAUSTION` |
 | `Context` | `SIDEWAY`, `UPTREND`, `DOWNTREND` |
-| `Action` | `WAIT`, `OPEN_BUY`, `OPEN_SELL`, `DCA`, `CLOSE_ALL`, `RECOVERY_DCA`, `RECOVERY_PAYOFF_REDUCE`, `ENTER_RECOVERY`, `EXIT_TO_FLAT` |
+| `Action` | `WAIT`, `OPEN_BUY`, `OPEN_SELL`, `DCA`, `CLOSE_ALL`, `PARTIAL_CLOSE`, `RECOVERY_DCA`, `PAYOFF_REDUCE`, `ENTER_RECOVERY`, `EXIT_TO_FLAT` |
 
-> Alias cũ: `STRONG_UP`/`STRONG_DOWN`/`NONE` ≈ PUSH ≥0.6 / NEUTRAL (xem [03-h1-signal.md](03-h1-signal.md) §7).
+Map queue: `OPEN_*`→`OPEN`, `PAYOFF_REDUCE`→`PAYOFF`/`PARTIAL_CLOSE` (xem [doc_agents/00-glossary](../doc_agents/00-glossary.md)).
+
+> Alias cũ `STRONG_*` chỉ còn ghi chú lịch sử trong [03](03-h1-signal.md) §7 — không dùng trong schema mới.
 
 ## 7. Magic / isolation
 

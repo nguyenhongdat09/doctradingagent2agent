@@ -1,5 +1,7 @@
 # 05 — Capital Management & DCA
 
+> **NGUYÊN TẮC BẤT BIẾN (ALL-LLM):** Spacing, ladder, AdverseRef là **THÔNG SỐ ĐẦU VÀO** cho Agent A/B phân tích. Engine tính và báo "spacing đủ" cho LLM — **KHÔNG** tự động enqueue DCA. Quyết định cuối luôn do Agent A+B consensus.
+
 ## 1. Tham chiếu vốn
 
 | Hạng mục | Giá trị default | Ghi chú |
@@ -69,24 +71,31 @@ InpSpacingNormalMode = FIXED_MID | RANDOM_RANGE
   RANDOM_RANGE: Coef ~ Uniform(Min, Max) mỗi lần tính spacing (seed theo bar)
 ```
 
-### 3.3 Điều kiện kích hoạt DCA theo giá
+### 3.3 Điều kiện kiểm tra DCA theo giá & Timing xét DCA
+
+> **TIMING DCA (DEC-09):**
+> - **ENTRY (lệnh đầu):** Chỉ xét tại thời điểm nến H1 đóng (H1 close).
+> - **DCA (NORMAL & RECOVERY):** Được xét ở **MỖI lần wake C3** (dynamic intra-bar, vài phút/lần) và tại H1 close. Khi giá chạm `spacing_met`, Agent A+B đánh giá và consensus để enqueue DCA ngay mà **KHÔNG cần chờ H1 close**, tránh bỏ lỡ nhịp lấp rổ.
+
+Engine tính và đưa vào snapshot cho Agent A/B ở mỗi lần wake:
 
 Với rổ hướng `BUY`:
 
 ```
-// DCA khi giá đi XUỐNG đủ xa so với giá vào BẤT LỢI nhất của rổ
-AdverseRef = min_i OpenPrice_i     // giá mua thấp nhất (worst-case buy entry)
-Trigger DCA BUY khi: Bid <= AdverseRef - SpacingPrice
+// Engine báo "spacing đủ" khi giá đi XUỐNG đủ xa
+AdverseRef = min_i OpenPrice_i
+spacing_met = (Bid <= AdverseRef - SpacingPrice)   // flag cho LLM
+// Khi spacing_met == true: Agent A+B đánh giá và ra quyết định ngay trong cycle wake đó
 ```
 
 Với rổ hướng `SELL`:
 
 ```
 AdverseRef = max_i OpenPrice_i
-Trigger DCA SELL khi: Ask >= AdverseRef + SpacingPrice
+spacing_met = (Ask >= AdverseRef + SpacingPrice)   // flag cho LLM
 ```
 
-> DCA chỉ cùng `BasketDir`. Không hedged.
+> DCA chỉ cùng `BasketDir`. Không hedged. Mọi DCA đều qua A+B consensus + HardValidator (spacing đúng, NormalizeLot, kill-switch off, cấm ngược rổ).
 
 ## 4. Mục tiêu chốt NORMAL (Basket TP)
 

@@ -1,5 +1,7 @@
 # 06 — Pair State Machine
 
+> **NGUYÊN TẮC BẤT BIẾN (ALL-LLM):** Mọi action thay đổi vị thế (ENTRY, DCA, RECOVERY_DCA, PAYOFF_REDUCE, CLOSE_ALL, PARTIAL_CLOSE) **BẮT BUỘC** qua Agent A đề xuất + Agent B phản biện → consensus → HardValidator → enqueue. Engine (mắt) chỉ cung cấp dữ liệu (spacing, ladder, snapshot). **Không có rule cứng tự động ra lệnh.**
+
 ## 1. Tổng quan
 
 Mỗi cặp có **một** state machine độc lập:
@@ -83,13 +85,28 @@ Nếu TotalLot == 0 → State = FLAT (desync recovery)
 Nếu TotalLot >= R_TH → State = RECOVERY (+ alert)
 ```
 
-### 5.2 Nhánh A — DCA theo spacing
+### 5.2 Nhánh A — DCA theo spacing (QUA A+B CONSENSUS & WAKE C3)
+
+> **ALL-LLM & TIMING DCA (DEC-09):**
+> - DCA NORMAL **KHÔNG** chạy tự động khi giá chạm spacing. Engine tính spacing/ladder làm **input** cho Agent A/B.
+> - DCA được xét ở **MỖI LẦN WAKE C3** (dynamic intra-bar, vài phút/lần) và tại H1 close. Khi `spacing_met == true`, Agent A+B đánh giá và ra quyết định ngay trong cycle wake đó, **KHÔNG chờ H1 close**.
 
 ```
-Tính SpacingPips / SpacingPrice (xem 05)
-Nếu giá adverse đủ Spacing:
-  lot = Lot(LadderStep + 1)
-  MARKET cùng BasketDir
+Engine tính: SpacingPips, SpacingPrice, AdverseRef, lot gợi ý = Lot(LadderStep + 1)
+→ Đưa vào MarketSnapshot cho A+B ở mỗi wake
+
+Agent A phân tích:
+  - Giá adverse đủ Spacing? (điều kiện cần, KHÔNG đủ)
+  - Bối cảnh D1 có hỗ trợ DCA không? (cú ép mạnh → chờ, không DCA vội)
+  - Rủi ro S/R D1, tin tức, exhaustion?
+  → Đề xuất: DCA lot=X hoặc WAIT
+
+Agent B phản biện:
+  - Đồng ý/challenge/veto
+
+Consensus + HardPass:
+  → A.enqueue_order(DCA, lot, BasketDir)
+  → Executor MARKET cùng BasketDir
   LadderStep += 1
   cập nhật AdverseRef, TotalLot
   Nếu TotalLot >= R_TH:
@@ -97,11 +114,12 @@ Nếu giá adverse đủ Spacing:
     Alert("ENTER RECOVERY", symbol, TotalLot)
 ```
 
-Điều kiện giá:
+Điều kiện giá (input cho LLM, KHÔNG phải trigger tự động):
 
 ```
-BUY:  Bid <= AdverseRef - SpacingPrice
-SELL: Ask >= AdverseRef + SpacingPrice
+BUY:  Bid <= AdverseRef - SpacingPrice   → engine báo "spacing đủ" cho Agent A
+SELL: Ask >= AdverseRef + SpacingPrice   → engine báo "spacing đủ" cho Agent A
+// Agent A QUYẾT ĐỊNH có DCA hay WAIT dựa trên toàn bộ bức tranh
 ```
 
 ### 5.3 Nhánh B — Chốt toàn bộ (Basket TP)
@@ -124,12 +142,16 @@ Nếu FavorableSqueeze AND BasketProfit >= BasketTpMoney:
 
 ### 5.4 Ưu tiên trong cùng 1 H1 bar (NORMAL)
 
-Thứ tự xử lý khuyến nghị:
+Thứ tự xử lý khuyến nghị (Agent A đánh giá, KHÔNG tự động):
 
 1. Refresh lot / desync check  
-2. **Close basket TP** (nếu đủ điều kiện) — ưu tiên chốt trước DCA  
-3. Else **DCA spacing**  
-4. Cập nhật state theo `TotalLot`
+2. Engine build MarketSnapshot (spacing status, basket profit, strength score)  
+3. **Agent A phân tích** toàn bộ snapshot → đề xuất action  
+4. **Agent B phản biện** → consensus  
+5. Nếu action = CLOSE_ALL (TP đủ + favorable squeeze) → enqueue  
+6. Else nếu action = DCA (spacing đủ + A+B đồng ý) → enqueue  
+7. Else WAIT  
+8. Cập nhật state theo `TotalLot`
 
 ### 5.5 Transitions
 
@@ -176,7 +198,9 @@ Sau mọi thao tác:
 
 **Quyết định thiết kế (đã chọn):** Một khi đã vào RECOVERY, **giữ RECOVERY** cho đến `TotalLot == 0`, **không** tụt về NORMAL dù lot giảm dưới `0.3`. Tránh flip-flop NORMAL↔RECOVERY và giữ rule “chỉ dừng khi sạch”.
 
-## 7. Kill-switch
+## 7. Kill-switch & SYSTEM_FREEZE
+
+### 7.1 Kill-switch (thủ công bởi Boss/operator)
 
 ```
 InpKillSwitch / chart button / GlobalVariable:
@@ -187,6 +211,22 @@ Design default khi bật kill-switch cứng: PAUSE + optional FLATTEN flag riên
 ```
 
 Kill-switch **không** phải transition tự động của state machine; nó override gates.
+Kill-switch **KHÔNG** tự kích hoạt — chỉ Boss/operator bật thủ công.
+
+### 7.2 SYSTEM_FREEZE (khi LLM không khả dụng)
+
+```
+Khi LLM API timeout / error / rate limit:
+  1. System → SYSTEM_FREEZE = true (flag toàn cục, KHÔNG phải pair state)
+  2. Mọi action → ĐÓNG BĂNG: engine KHÔNG tự DCA/close/entry
+  3. Mọi position → GIỮ NGUYÊN (pair state không đổi)
+  4. Alert Boss ngay: ALERT_LLM_OUTAGE + lý do + snapshot positions
+  5. Boss = bộ não dự phòng duy nhất — can thiệp thủ công nếu cần
+  6. Thoát FREEZE: LLM khôi phục (auto-resume) HOẶC Boss điều chỉnh thủ công
+
+KHÔNG có cơ chế auto-degrade về rule-only.
+KHÔNG có auto-flatten sau N phút.
+```
 
 ## 8. Bảng tổng hợp transition (đủ tham số)
 

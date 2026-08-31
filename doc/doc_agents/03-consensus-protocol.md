@@ -1,101 +1,58 @@
 # 03 — Consensus Protocol
 
-## 1. Mục tiêu
-
-Quy định khi nào được **execute**, khi nào **defer + sleep**, và khi nào **Boss** tham gia chốt.
-
-## 2. Hard gate (luôn trước mọi consensus)
+## 1. Hard gate
 
 ```
-HardPass = HardValidator(plan_or_proposal) == PASS
-Nếu ¬HardPass → FORBIDDEN_EXEC (kể cả BossOverride khi BOSS_FORCE=false)
+HardPass = HardValidator(plan) == PASS
+Nếu ¬HardPass → FORBIDDEN_ENQUEUE
 ```
 
-## 3. Mode AUTO — đồng thuận A↔B
+HardValidator (5 checks) — xem phuong_phap overview:
+1. Matrix action hợp lệ (PUSH≥0.6 + Context)  
+2. Spacing / ladder đúng  
+3. RECOVERY cấm mở ngược  
+4. NormalizeLot  
+5. Kill-switch off  
+
+## 2. Mode AUTO
 
 ```
 CONSENSUS_AUTO ⇔
   session_mode == AUTO
   ∧ HardPass
-  ∧ B.decision == APPROVE
-  ∧ ballot_valid(B)
-  ∧ A.ready_to_execute == true
+  ∧ B.decision == APPROVE ∧ ballot_valid(B)
+  ∧ A.ready_to_enqueue == true
 
-→ Agent A OrderSend
+→ A.enqueue_order(MarketOrderInfo PENDING)
+→ Executor thực thi
 ```
 
-### Debate trong cycle (C4)
+Debate C4: ≤2 vòng CHALLENGE trong cycle; hết → DEFER C1/C2/C3.
 
-```
-round = 0
-loop:
-  A publishes plan
-  B ballots
-  if B.APPROVE → CONSENSUS_AUTO
-  if B.CHALLENGE and round < 2:
-      round += 1
-      A revises
-      continue
-  else:
-      DEFER → áp C1/C2/C3 theo PairState
-      break
-```
-
-## 4. Mode BOSS — đồng thuận có Boss
+## 3. Mode BOSS (v1 — không Override)
 
 ```
 CONSENSUS_WITH_BOSS ⇔
   session_mode == BOSS
   ∧ HardPass
-  ∧ BossACK == true
-  ∧ B.decision == APPROVE
-  ∧ ballot_valid(B)
-  → A OrderSend
+  ∧ B.decision == APPROVE ∧ ballot_valid(B)
+  → A.enqueue_order(...)
 
-BOSS_OVERRIDE_EXEC ⇔
-  session_mode == BOSS
-  ∧ HardPass
-  ∧ BossACK == true
-  ∧ BossOverride.present == true
-  ∧ BossOverride.reason.length > 0
-  ∧ B.decision ∈ {REJECT, CHALLENGE, INVALID}
-  → A OrderSend + audit BOSS_OVERRIDE
+Nếu B ≠ APPROVE (kể cả Boss muốn đi tiếp):
+  → DEFER (C1/C2/C3) — KHÔNG có BOSS_OVERRIDE_EXEC
 ```
 
-Nếu BossACK nhưng không Override và B ≠ APPROVE → DEFER (A set wake theo C1–C3), không execute.
+`BossACK` chỉ ghi nhận Boss đã tham gia bàn; **không** thay thế B.APPROVE.
 
-## 5. Case DEFER C1–C4 (khi A≠B hoặc hết debate)
+## 4. Case DEFER C1–C4
 
-| Case | Điều kiện PairState / H1 | Hành động |
-|------|--------------------------|-----------|
-| **C1** | FLAT ∧ `ElapsedInH1 >= 30m` | `WakeRequest(now+30m)` bắt buộc |
-| **C2** | FLAT ∧ `ElapsedInH1 < 30m` | `WakeRequest(H1_open+30m)` |
-| **C3** | NORMAL ∨ RECOVERY | A chọn dynamic wake ∈ [WakeMin, WakeMax] theo chart/PnL/spacing |
-| **C4** | Còn lượt CHALLENGE trong cycle | Tiếp revise; không sleep |
+Giữ như [05-scheduler-wakeup.md](05-scheduler-wakeup.md): C1 +30m FLAT; C2 H1+30m; C3 dynamic OPEN; C4 debate trong cycle.
 
-`BossWake` có thể cắt ngang DEFER sleep bất kỳ lúc nào.
+## 5. Action types cần consensus rồi enqueue
 
-## 6. Action types cần consensus
+ENTRY, DCA, RECOVERY_DCA, PAYOFF_REDUCE, CLOSE_ALL, PARTIAL_CLOSE.  
+WAIT: A có thể tự WAIT + set wake (không enqueue).
 
-| Action | AUTO cần | BOSS cần |
-|--------|----------|----------|
-| ENTRY BeginLot | CONSENSUS_AUTO | CONSENSUS_WITH_BOSS hoặc OVERRIDE |
-| DCA (lệnh ≥ 2) | CONSENSUS_AUTO trên DcaReview | tương tự |
-| RECOVERY_DCA / PAYOFF_REDUCE | CONSENSUS_AUTO | tương tự |
-| CLOSE_ALL (NORMAL TP) | CONSENSUS_AUTO | tương tự |
-| WAIT | Không cần B (A có thể tự WAIT + set wake) | Boss có thể yêu cầu replan |
+## 6. Audit
 
-## 7. Conflict A vs B vs Boss (tóm tắt)
-
-```
-if ¬HardPass: block
-elif BOSS and BossACK and B.APPROVE: exec CONSENSUS_WITH_BOSS
-elif BOSS and BossACK and BossOverride: exec BOSS_OVERRIDE_EXEC
-elif AUTO and B.APPROVE: exec CONSENSUS_AUTO
-elif CHALLENGE and rounds left: C4
-else: DEFER C1/C2/C3
-```
-
-## 8. Audit bắt buộc mỗi outcome
-
-Ghi: `timestamp, symbol, session_mode, plan_id, HardPass, B.decision, BossACK, BossOverride.reason?, outcome, order_tickets?`
+`timestamp, symbol, session_mode, plan_id, HardPass, B.decision, BossACK?, outcome, queue_row_id?, tickets?`

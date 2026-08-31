@@ -29,7 +29,12 @@ Tài liệu này hướng dẫn cấu trúc các module Python, vai trò của "
 4. `get_positions(symbol: str) -> list[dict]`:
    - Chi tiết từng lệnh: ticket, open_price, current_profit, swap, lot.
 5. `hard_validate(plan: dict) -> tuple[bool, str]`:
-   - Cho phép Agent tự kiểm tra tính hợp lệ trước khi gửi chính thức.
+   - Cho phép Agent tự kiểm tra tính hợp lệ trước khi enqueue.
+6. `enqueue_order(plan: dict) -> int`:
+   - INSERT `MarketOrderInfo` status=`PENDING` (Agents **không** gọi `mt5.order_send`).
+7. Experience tools (shared `experience.db`):
+   - `get_memory_pack(symbol, context_type, action_type) -> str`
+   - `record_lesson(...)` / `evaluate(plan, outcome)` / `submit_feedback(...)` — ghi qua LessonWriter.
 
 ---
 

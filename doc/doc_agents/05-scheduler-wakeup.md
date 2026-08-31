@@ -5,31 +5,61 @@
 Orchestrator giữ `next_wake_at` (per symbol hoặc global). Agent A **quyết** thời điểm hẹn qua `WakeRequest`. Boss có thể **interrupt** bằng `BossWake`.
 
 ```
-priority: BossWake  >  next_wake_at timer  >  idle
+priority: BossWake  >  H1_close (bắt buộc)  >  next_wake_at timer  >  idle
 ```
 
-## 2. Công thức thời gian H1
+## 2. Nguyên tắc BẮT BUỘC: FLAT thức đúng MỖI NẾN H1 ĐÓNG
+
+> **QUY TẮC CỨNG (ADR-005):** Khi cặp KHÔNG có lệnh (FLAT), agents PHẢI thức giấc
+> **đúng tại thời điểm mỗi nến H1 đóng** để xem xét tín hiệu. Đây là rule nền tảng,
+> không được bỏ qua — vì mọi quyết định ENTRY hợp lệ chỉ xét tại H1 close.
+
+```
+H1_close_time  = thời điểm nến H1 hiện tại ĐÓNG (broker)
+FLAT: next_wake_at = H1_close_time (bắt buộc)   // + đồng hồ chính xác, không trễ
+```
+
+Mục đích: agents không ngủ xuyên suốt H1; **tối thiểu** 1 lần dậy đúng lúc nến đóng.
+Các quy tắc C1/C2 bên dưới chỉ là **wake bổ sung** giữa nến (tùy chọn), KHÔNG thay thế
+việc thức lúc H1 close.
+
+**Chống trùng lặp (bắt buộc):**
+- Mỗi nến H1 chỉ xử lý **1 lần** dựa trên `last_processed_bar_id` lưu trong `PairState`
+  (giá trị = `iTime(H1)` của nến đã xử lý).
+- Khi wake, nếu `H1_close_time` của nến hiện tại == `last_processed_bar_id` → bỏ qua (đã xử lý).
+- Nếu khác → xử lý, rồi cập nhật `last_processed_bar_id`.
+- Tránh tình trạng 2 lần wake trong cùng 1 nến mà xử lý tín hiệu 2 lần.
+
+## 3. Công thức thời gian H1
 
 ```
 H1_open      = time mở nến H1 hiện tại (broker)
+H1_close     = H1_open + 1 giờ (đồng hồ nến đóng)
 ElapsedInH1  = now - H1_open
 H1_mid       = H1_open + 30 minutes
 ```
 
-## 3. FLAT — quy tắc cố định (C1 / C2)
+## 4. FLAT — quy tắc cố định (C0 bắt buộc + C1 / C2 bổ sung)
 
 | Điều kiện | Wake |
 |-----------|------|
-| FLAT ∧ `ElapsedInH1 >= 30m` (C1) | `next_wake_at = now + 30m` **bắt buộc** khi DEFER / hết cycle không entry |
-| FLAT ∧ `ElapsedInH1 < 30m` (C2) | `next_wake_at = H1_mid` (= H1_open + 30m) |
+| **C0 (BẮT BUỘC)** | **`next_wake_at = H1_close_time`** — thức đúng mỗi nến H1 đóng để xét tín hiệu |
+| **C1** (bổ sung) FLAT ∧ `ElapsedInH1 >= 30m` | `next_wake_at = now + 30m` (wake giữa nến, xem xét thêm) |
+| **C2** (bổ sung) FLAT ∧ `ElapsedInH1 < 30m` | `next_wake_at = H1_mid` (= H1_open + 30m) |
 
-Mục đích: agents không ngủ xuyên suốt H1; tối thiểu một lần dậy giữa nến / sau mốc 30p để sẵn sàng quanh tín hiệu H1 close (phuong_phap).
+> Khi không có lệnh, agents hiểu rõ quy tắc: **"mỗi cây H1 đóng thì phải thức giấc"**.
+> C1/C2 chỉ là các mốc wake phụ trợ để agents có thể bàn luận sớm hơn — không được
+> làm trễ mốc H1 close chính.
 
 **Sau ENTRY thành công:** PairState → NORMAL → chuyển sang quy tắc OPEN (C3).
 
-## 4. OPEN (NORMAL / RECOVERY) — timer dynamic (C3)
+## 5. OPEN (NORMAL / RECOVERY) — timer dynamic (C3) & DCA timing
 
-Agent A tự chọn `interval` dựa trên chart:
+> **QUY TẮC TIMING DCA (DEC-09):** Khi đang có lệnh (NORMAL hoặc RECOVERY), Agent A thức theo **C3 dynamic interval** (vài phút/lần). Ở MỖI lần wake C3, nếu `spacing_met == true`, Agent A và B **ĐÁNH GIÁ VÀ XÉT DCA NGAY LẬP TỨC** (không cần chờ H1 close), để không bỏ lỡ nhịp lấp rổ khi giá chạy ngược giữa nến.
+>
+> Ngược lại, **ENTRY (lệnh đầu) và RECOVERY tín hiệu mạnh (Squeeze)** vẫn neo theo H1 close.
+
+Agent A tự chọn `interval` C3 dựa trên diễn biến thị trường:
 
 | Gợi ý heuristic (doc, không hard-code duy nhất) | Interval gợi ý |
 |------------------------------------------------|----------------|
@@ -45,7 +75,12 @@ interval = clamp(A_choice, WakeMin, WakeMax)
 next_wake_at = now + interval
 ```
 
-## 5. BossWake interrupt
+> Tại mỗi lần wake C3:
+> 1. Engine cập nhật `MarketSnapshot` (giá Bid/Ask, `spacing_met`, PnL).
+> 2. Nếu `spacing_met` (giá adverse đủ khoảng cách) → Agent A đánh giá DCA ngay, Agent B phản biện. Nếu consensus → enqueue DCA ngay giữa nến.
+> 3. Không trì hoãn việc DCA sang H1 close nếu điều kiện giá và bối cảnh đã phù hợp.
+
+## 6. BossWake interrupt
 
 ```
 on BossWake:
@@ -59,19 +94,19 @@ Sau khi BOSS session kết thúc (exec hoặc defer):
 
 ```
 session_mode = AUTO
-A issues WakeRequest theo PairState (C1/C2/C3)
+A issues WakeRequest theo PairState (C0/C1/C2 khi FLAT; C3 khi OPEN)
 ```
 
-## 6. Quan hệ wake vs H1 close (phuong_phap)
+## 7. Quan hệ wake vs H1 close (phuong_phap)
 
 | Khái niệm | Vai trò |
 |-----------|---------|
 | Wake cycle | Agents **làm việc** (quan sát, bàn, có thể WAIT) |
 | H1 bar close | Điều kiện **hợp lệ** để HardValidator cho phép ENTRY/DCA theo signal nến đóng |
 
-Ví dụ: BossWake giữa H1 → agents bàn được; nếu signal cần nến **đã đóng** mà chưa đóng → plan action=WAIT hoặc chờ close (A có thể set wake sát `H1_close_time`).
+Ví dụ: BossWake giữa H1 → agents bàn được; nếu signal cần nến **đã đóng** mà chưa đóng → plan action=WAIT hoặc chờ close (A set wake đúng `H1_close_time`).
 
-## 7. Pseudocode orchestrator
+## 8. Pseudocode orchestrator
 
 ```
 loop:
@@ -85,12 +120,26 @@ loop:
   next_wake_at = A.last_WakeRequest.next_wake_at
 ```
 
-## 8. Tham số scheduler (design defaults)
+## 9. Chống trùng tín hiệu (last_processed_bar_id)
+
+```
+on wake:
+  bar_id = iTime(symbol, H1, 0)          // nến H1 hiện tại
+  if bar_id == PairState.last_processed_bar_id:
+      skip  // đã xử lý nến này rồi
+  else:
+      process_cycle(...)
+      PairState.last_processed_bar_id = bar_id
+  // Ghi PairState.update (ADL: dca_<symbol>.db)
+```
+
+## 10. Tham số scheduler (design defaults)
 
 | Param | Default | Mô tả |
 |-------|---------|--------|
-| `FlatWakeAfterMidMinutes` | 30 | C1: +30m sau mốc |
-| `H1MidOffsetMinutes` | 30 | C2: H1_open+30 |
+| `FlatWakeOnH1Close` | `true` | C0: bắt buộc thức đúng H1 close khi FLAT (khóa cứng) |
+| `FlatWakeAfterMidMinutes` | 30 | C1: +30m sau mốc (bổ sung) |
+| `H1MidOffsetMinutes` | 30 | C2: H1_open+30 (bổ sung) |
 | `WakeMinSeconds` | 180 | 3m |
 | `WakeMaxSeconds` | 3600 | 60m |
 | `MaxDebateRounds` | 2 | C4 |

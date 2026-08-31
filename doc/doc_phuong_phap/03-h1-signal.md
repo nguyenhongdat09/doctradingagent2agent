@@ -81,7 +81,8 @@ near_zone = InpZoneNearATR * ATR_D1     // default 1.5
 | SIDEWAY | UP hoặc DOWN | Gần biên range D1 (swing high/low) | Giữa range, không biên |
 
 ```
-Location = clamp(W_LOC * quality_unit, -W_LOC_penalty, W_LOC)
+Location = clamp(W_LOC * quality_unit, -InpWLocPenalty, W_LOC)
+// InpWLocPenalty default = 0.2 (= W_LOC)
 // quality_unit ∈ [-1, 1]; điểm âm khi ép sai vùng
 ```
 
@@ -159,8 +160,8 @@ SignalEffective =
       strength = strength_final; verdict = LLM.verdict
   else:
       strength = strength_score
-      verdict = (Score_UP>=Score_DOWN && strength>=PushMin) ? PUSH_UP
-              : (Score_DOWN>Score_UP && strength>=PushMin) ? PUSH_DOWN
+      verdict = (Score_UP>=Score_DOWN && strength>=InpPushEnter) ? PUSH_UP
+              : (Score_DOWN>Score_UP && strength>=InpPushEnter) ? PUSH_DOWN
               : NEUTRAL
 
 // Phase 1: UseLlmSignal=false — chỉ mắt + rails ngưỡng

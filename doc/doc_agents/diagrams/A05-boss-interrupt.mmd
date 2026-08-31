@@ -1,47 +1,44 @@
-%% A05 — Boss interrupt: wake sleeping agents → chat → ACK → A OrderSend
-%% Spec: 11-boss-interrupt-flow
-
+%% A05 — Boss interrupt v1: no Override; B.APPROVE required to enqueue
 sequenceDiagram
   autonumber
   participant Boss as Boss_Human
   participant Orch as Orchestrator
   participant A as AgentA
   participant B as AgentB
+  participant Exp as ExperienceDB
   participant HV as HardValidator
+  participant Q as MarketOrderInfo
+  participant EX as Executor
   participant MT5 as MT5_Broker
 
-  Note over A,B: Agents_may_be_SLEEPING_on_timer
-  Boss->>Orch: BossWake_intent_symbols
-  Orch->>Orch: cancel_sleep_session_mode_BOSS
-  Orch->>A: ForceWake_with_Boss_intent
+  Note over A,B: May_be_SLEEPING
+  Boss->>Orch: BossWake_intent
+  Orch->>Orch: cancel_sleep_session_BOSS
+  Orch->>A: ForceWake
   Orch->>B: ForceWake
-
-  A->>A: Observe_market_plus_Boss_intent
-  A->>HV: TradePlan_or_ActionProposal
+  A->>Exp: get_memory_pack
+  A->>A: Observe_plus_Boss_intent
+  A->>HV: TradePlan
   HV-->>A: HardPass_or_Fail
   alt HardFail
-    A->>Boss: Explain_blocked_by_phuong_phap
-    Boss->>Orch: end_or_reprompt
+    A->>Boss: Explain_blocked_by_rails
   else HardPass
     A->>B: Plan
-    B->>Boss: Independent_dissent_or_agree_ballot
+    B->>Boss: Independent_ballot
     loop BossChat_max_turns
-      Boss->>A: Question_or_direction
+      Boss->>A: Question
       A->>Boss: Clarification
       B->>Boss: Counter_evidence
-      A->>HV: Optional_revise
     end
-    Boss->>Orch: BossACK
+    Boss->>Orch: BossACK_optional_log
     alt B_APPROVE
-      A->>MT5: OrderSend_CONSENSUS_WITH_BOSS
-    else BossOverride_with_reason
-      A->>MT5: OrderSend_BOSS_OVERRIDE_EXEC
-    else No_override_on_dissent
+      A->>Q: INSERT_PENDING
+      EX->>MT5: OrderSend
+      MT5-->>EX: Fill
+    else B_dissent
       A->>Orch: DEFER_WakeRequest_C1_C2_C3
+      Note over Boss: No_Override_v1
     end
-    MT5-->>A: Fill_optional
-    A->>Orch: ExecutionReport_optional
   end
   Orch->>Orch: session_mode_AUTO
   A->>Orch: WakeRequest_next
-  Orch->>Orch: sleep_until_next_wake_at

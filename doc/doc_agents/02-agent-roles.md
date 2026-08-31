@@ -1,78 +1,53 @@
 # 02 — Agent Roles
 
-## 1. Agent A — Planner-Executor
+## 1. Agent A — Planner (không phải Executor sàn)
 
 ### Trách nhiệm
-- **Tự fetch** D1 rồi H1 theo [12-market-data-fetch.md](12-market-data-fetch.md); thiếu thì `fetch_more`.
-- Nhận swing/features **deterministic** — không bịa pivot; diễn giải cấu trúc như trader (LLM).
-- Soạn `TradePlan` / `ActionProposal` / `DcaReview` đủ chi tiết (symbol, hướng, lot, lý do, rule refs).
-- Tranh luận với B (revise ≤ 2 vòng/cycle khi CHALLENGE).
-- Trong `BOSS` mode: tiếp nhận ý Boss, giải thích plan bằng ngôn ngữ rõ.
-- **Sau đủ điều kiện consensus → tự gọi tool OrderSend / partial close.**
-- Sau mỗi cycle: `WakeRequest` theo C1–C3; theo dõi PnL để chọn dynamic timer khi có lệnh.
+- Tự fetch D1/H1; nhận structure features + H1 strength score deterministic.
+- `get_memory_pack` trước khi lập plan; đưa pack vào lập luận.
+- Soạn `TradePlan` / `DcaReview`; tranh luận với B (≤2 vòng/cycle).
+- Trong `BOSS`: tiếp nhận ý Boss; **không** được execute khi B dissent.
+- Sau consensus + HardPass → **`enqueue_order(...)`** = INSERT `MarketOrderInfo` status=`PENDING`.
+- Set wake C1–C3; sau đóng lệnh gọi `submit_feedback` / `record_lesson` (qua tool / LessonWriter).
 
 ### Không được
-- OrderSend khi thiếu B.APPROVE ở `AUTO`.
-- OrderSend khi `BOSS` thiếu BossACK.
-- Bỏ qua `HardValidator` / SAFETY RAILS.
-- Tự invent swing points.
-- Set wake ngoài biên `[WakeMin, WakeMax]` khi OPEN (trừ C1/C2 cố định +30m).
+- Gọi `OrderSend` / đóng lệnh MT5 trực tiếp.
+- Enqueue khi thiếu B.APPROVE (AUTO và BOSS).
+- Bỏ HardValidator / invent swing.
 
 ## 2. Agent B — Independent Challenger
 
 ### Trách nhiệm
-- Tự fetch snapshot/features (hoặc dùng raw cache) và **tự diễn giải** cấu trúc D1 — không copy A.
-- Trả `ReviewBallot` với đủ: thesis, counter_evidence, agree_points, dissent_points, decision.
-- Có thể CHALLENGE khi LLM A confidence thấp / narrative lệch rails.
-- Trong BOSS mode: phản biện cả gợi ý Boss nếu trái structure data.
+- Độc lập đọc snapshot + MemoryPack; bắt lỗi A vi phạm bài học AVOID.
+- `ReviewBallot` đủ field; CHALLENGE khi cần.
+- Trong BOSS: phản biện cả Boss nếu trái data/rails.
 
 ### Không được
-- APPROVE không có `counter_evidence`.
-- Đồng ý chỉ vì “Boss bảo vậy” hoặc paraphrase A (sycophancy).
-- Tự OrderSend.
+- APPROVE không `counter_evidence`; ba phải; enqueue/OrderSend.
 
-### Anti-sycophancy checks (orchestrator/heuristic)
-```
-Ballot INVALID nếu:
-  - thiếu counter_evidence, OR
-  - similarity(text_B, text_A) > Threshold (gợi ý 0.85), OR
-  - decision=APPROVE nhưng dissent_points rỗng và không nêu rủi ro residual
-```
-
-## 3. Boss — Human (bạn)
+## 3. Boss — Human (v1)
 
 ### Trách nhiệm
-- Gửi `BossWake` + intent khi thấy market ok / cần bàn gấp.
-- Hội thoại với A/B; `BossACK` khi chốt.
-- `BossOverride` chỉ khi B không APPROVE nhưng Boss vẫn muốn execute (bắt buộc `reason`).
-- Emergency kill / flatten qua kênh out-of-band (xem 10).
+- `BossWake` + intent; hội thoại 3 bên; `BossACK` = xác nhận đã bàn xong (không thay ballot B).
 
-### Không được (design chuẩn)
-- Gọi trực tiếp OrderSend (tránh lệch audit; mọi lệnh đi qua A).
-- Ép HardValidator FAIL trở thành PASS (trừ experimental `BOSS_FORCE`, mặc định OFF).
+### Không được (v1)
+- `BossOverride` / ép HardValidator / OrderSend / enqueue thay A.
+- Khi B dissent → chấp nhận **DEFER**.
 
-## 4. Orchestrator — Python
+## 4. Orchestrator + Executor
 
-### Trách nhiệm
-- `sleep_until(next_wake_at)`; hủy khi BossWake.
-- Định tuyến message A↔B↔Boss.
-- Gắn `session_mode`, đếm debate rounds, ghi audit log.
-- Cung cấp tool surface cho A (market data, positions, OrderSend wrapper).
+| Thành phần | Làm | Không làm |
+|------------|-----|-----------|
+| Orchestrator | Wake, bus, session_mode, audit, HardValidator gate trước enqueue | Chọn hướng lệnh |
+| Executor Thread | Poll PENDING → claim PROCESSING → MT5 OrderSend/Close → Archive hoặc FAILED | Sinh plan |
 
-### Không được
-- Tự chọn BUY/SELL/DCA.
-- Auto-approve thay B.
+## 5. RACI rút gọn
 
-## 5. Ma trận RACI (rút gọn)
-
-| Việc | A | B | Boss | Orch |
-|------|---|---|------|------|
-| Quan sát / fetch nến | R | R | C | I (tools) |
-| Structure eyes (deterministic) | I | I | — | R (engine) |
-| Diễn giải context LLM | R | R | C | I |
-| Draft plan | R | C | C (BOSS) | I |
-| Ballot | C | R | I | I |
-| ACK / Override | I | I | R (BOSS) | I |
-| OrderSend | R | — | — | I (tool host) |
-| Set wake | R | — | C | R (fire timer) |
-| Hard validate | R/I | I | I | R (gate) |
+| Việc | A | B | Boss | Orch | Executor |
+|------|---|---|------|------|----------|
+| Fetch / MemoryPack | R | R | C | I | — |
+| Draft plan | R | C | C (BOSS) | I | — |
+| Ballot | C | R | I | I | — |
+| Enqueue MarketOrderInfo | R | — | — | I (gate) | — |
+| OrderSend MT5 | — | — | — | I | **R** |
+| Set wake | R | — | C | R (timer) | — |

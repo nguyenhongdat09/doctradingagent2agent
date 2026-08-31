@@ -76,7 +76,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "plan_id": "uuid|null",
   "symbol": "AUDCAD",
   "context_independent": "UPTREND|...",
-  "signal_independent": "STRONG_DOWN|...",
+  "signal_independent": "PUSH_DOWN|PUSH_UP|NEUTRAL|EXHAUSTION",
   "thesis": "string",
   "market_notes": "string"
 }
@@ -151,38 +151,77 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
 {
   "type": "BossACK",
   "plan_id": "uuid",
-  "approved": true,
-  "note": "string"
+  "note": "string — xác nhận đã tham gia bàn; không thay B.APPROVE"
 }
 ```
 
-### BossOverride
-```json
-{
-  "type": "BossOverride",
-  "plan_id": "uuid",
-  "reason": "string — BẮT BUỘC non-empty",
-  "acknowledge_b_dissent": true
-}
-```
+> **v1:** Không có `BossOverride`.
 
-## 7. ExecutionReport (sau OrderSend của A)
+## 7. ExecutionReport (từ Executor sau MT5)
 
 ```json
 {
   "exec_id": "uuid",
   "plan_id": "uuid",
-  "outcome_consensus": "CONSENSUS_AUTO|CONSENSUS_WITH_BOSS|BOSS_OVERRIDE_EXEC",
+  "queue_row_id": 123,
+  "outcome_consensus": "CONSENSUS_AUTO|CONSENSUS_WITH_BOSS",
   "tickets": [123456],
   "fill_price": 0.91234,
-  "status": "FILLED|REJECTED|PARTIAL",
+  "status": "FILLED|REJECTED|PARTIAL|FAILED",
   "error": "string|null"
 }
 ```
 
-## 8. Validation rules (schema)
+## 8. SystemFreeze & AlertLlmOutage (khi LLM không khả dụng)
 
-- `ReviewBallot.APPROVE` mà `counter_evidence` rỗng → ép `INVALID`.
-- `BossOverride.reason` rỗng → bỏ qua Override.
-- `lot` phải khớp ladder / BeginLot / PayoffPct theo phuong_phap.
-- `action=ENTRY` chỉ khi `pair_state=FLAT` (sau refresh).
+### SystemFreezeEvent
+```json
+{
+  "type": "SystemFreezeEvent",
+  "freeze": true,
+  "reason": "LLM_TIMEOUT|LLM_ERROR|LLM_RATE_LIMIT",
+  "detail": "string — mô tả lỗi cụ thể",
+  "positions_snapshot": {
+    "AUDCAD": {"state":"NORMAL","total_lot":0.15,"dir":"BUY","profit":-8.50},
+    "AUDNZD": {"state":"FLAT","total_lot":0,"dir":"NONE","profit":0}
+  },
+  "created_at": "ISO-8601"
+}
+```
+
+### AlertLlmOutage (gửi Boss)
+```json
+{
+  "type": "ALERT_LLM_OUTAGE",
+  "severity": "CRITICAL",
+  "message": "LLM API không khả dụng — hệ thống FREEZE. Boss can thiệp thủ công nếu cần.",
+  "reason": "string",
+  "positions_snapshot": {},
+  "retry_count": 3,
+  "last_error_at": "ISO-8601",
+  "created_at": "ISO-8601"
+}
+```
+
+Khi LLM khôi phục:
+```json
+{
+  "type": "SystemFreezeEvent",
+  "freeze": false,
+  "reason": "LLM_RECOVERED",
+  "detail": "LLM API khôi phục — auto-resume hoạt động bình thường",
+  "created_at": "ISO-8601"
+}
+```
+
+> **KHÔNG** có cơ chế auto-degrade về rule-only. **KHÔNG** có auto-flatten.
+> Boss là bộ não dự phòng duy nhất khi FREEZE.
+
+## 9. Validation rules (schema)
+
+- `ReviewBallot.APPROVE` mà `counter_evidence` rỗng → `INVALID`.
+- `lot` khớp ladder / BeginLot / PayoffPct.
+- `action=ENTRY` / OPEN_* chỉ khi `pair_state=FLAT`.
+- Enqueue chỉ sau HardPass ∧ B.APPROVE.
+- **ALL-LLM:** MỌI action (kể cả DCA NORMAL, WAIT) phải qua A+B consensus. Engine KHÔNG tự enqueue.
+- **SYSTEM_FREEZE:** Khi `freeze=true`, mọi enqueue bị chặn — chỉ Boss can thiệp thủ công.

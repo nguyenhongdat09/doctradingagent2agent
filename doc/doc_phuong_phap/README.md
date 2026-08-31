@@ -4,6 +4,7 @@ Bộ đặc tả kiến trúc phương pháp và nghiệp vụ giao dịch cho *
 
 > **Bản cập nhật chính thức:** Thay thế toàn bộ các phiên bản trước.  
 > **Nền tảng:** Python Engine (Mắt + Executor) + MetaTrader 5 API + LLM Agents (Não) + SQLite.
+> **Nguyên tắc ALL-LLM:** MỌI action giao dịch qua Agent A+B consensus. Engine chỉ cung cấp dữ liệu. Xem [ERRATA](../ERRATA.md).
 
 ---
 
@@ -22,7 +23,9 @@ Bộ đặc tả kiến trúc phương pháp và nghiệp vụ giao dịch cho *
 | [08-parameters.md](08-parameters.md) | Bảng tham số + default + validation rules |
 | [09-data-sources.md](09-data-sources.md) | Nguồn dữ liệu (nến, snapshot, engines, account) |
 | [10-sqlite-design.md](10-sqlite-design.md) | DB schema: 8 bảng, cột, CHECK, index, pragma, claim atomic, archive transaction |
-| [11-python-engine-notes.md](11-python-engine-notes.md) | Kiến trúc Python: mắt engine, tools cho agents, executor thread, runtime lifecycle |
+| [11-python-engine-notes.md](11-python-engine-notes.md) | Kiến trúc Python: mắt engine (data only), tools cho agents, executor thread, runtime lifecycle |
+| [12-operations-reliability.md](12-operations-reliability.md) | **[NEW]** Error handling, startup/reconciliation, SYSTEM_FREEZE, monitoring Phase 1 |
+| [13-testing-strategy.md](13-testing-strategy.md) | **[NEW]** Unit/integration/LLM decision/scenario/forward test strategy |
 
 ---
 

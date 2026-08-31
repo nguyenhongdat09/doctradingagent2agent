@@ -13,7 +13,8 @@ Bộ đặc tả kiến trúc cơ sở dữ liệu tri thức dùng chung (`expe
 
 | File | Nội dung |
 |------|----------|
-| [01-experience-db-spec.md](01-experience-db-spec.md) | Triết lý, Schema DDL đầy đủ, Template bài học, Thuật toán Scoring, MemoryPack 2 tầng, Vòng đời Dedupe & Invalidation, Chi phí Token & Python Tools |
+| [01-experience-db-spec.md](01-experience-db-spec.md) | Triết lý, Schema DDL, Scoring, MemoryPack, Dedupe, Concurrency WAL |
+| [02-map-to-agents.md](02-map-to-agents.md) | Tools A/B/LessonWriter và vị trí trong flow |
 
 ---
 

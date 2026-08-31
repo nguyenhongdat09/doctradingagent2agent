@@ -2,12 +2,13 @@
 
 ## 1. Mục tiêu hệ thống
 
-Xây dựng **Trading Agent DCA** dạng Expert Advisor (MQL5) tự động:
+Xây dựng **Trading Agent DCA** trên **Python Engine** + MetaTrader 5 API:
 
-- Theo dõi **4 cặp cố định**: `AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`.
-- Dùng **D1** làm bộ lọc bối cảnh (cấu trúc giá); **H1** làm tín hiệu ép giá (Strength Score).
-- Quản lý vốn theo **ladder lot + spacing ATR**; khi tổng lot vượt ngưỡng → chế độ **RECOVERY** đến khi sạch lệnh.
-- Mỗi cặp có **state machine độc lập**: `FLAT → NORMAL → RECOVERY → FLAT`.
+- 4 cặp cố định độc lập: `AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`.
+- D1 = bối cảnh cấu trúc giá; H1 = Strength Score ép giá.
+- Ladder lot + spacing ATR; RECOVERY khi `TotalLot ≥ R_TH` đến khi sạch.
+- State: `FLAT → NORMAL → RECOVERY → FLAT`.
+- LLM Agents (A/B) quyết định → **queue `MarketOrderInfo`** → Executor OrderSend ([`doc_agents`](../doc_agents/)).
 
 ## 2. Triết lý giao dịch
 
@@ -15,99 +16,88 @@ Xây dựng **Trading Agent DCA** dạng Expert Advisor (MQL5) tự động:
 flowchart LR
   D1ctx["D1 Context\nMarket structure swings\nplus LLM interpret optional"] -->|"bộ lọc chiều"| Matrix["Decision Matrix"]
   H1sig["H1 Push Score 0-1\nmom+structure+zone+confirm"] -->|"thời điểm vào"| Matrix
-  Matrix --> Action["MARKET entry / DCA / Close / Recovery"]
+  Matrix --> Action["Enqueue MARKET via Executor"]
 ```
 
 | Tầng | Timeframe | Vai trò |
 |------|-----------|---------|
-| Context | D1 (nến đã đóng) | Cấu trúc giá (swing/BOS) → UPTREND / DOWNTREND / SIDEWAY; **không** ADX/EMA |
-| Timing | H1 (nến vừa đóng) | Strength Score 0–1 + verdict PUSH_UP/DOWN (≥0.6 vào matrix) |
-| Execution | Ngay tại H1 close | MARKET order; không chờ nến tiếp theo |
+| Context | D1 đã đóng | Swing/BOS → ContextFinal; **không** ADX/EMA |
+| Timing | H1 đã đóng | Strength Score; PUSH≥0.6 vào matrix |
+| Execution | Sau consensus | INSERT queue → Executor → MT5 |
 
-**Buy the dip / Sell the rally / Fade extremes** — phụ thuộc context (xem [04-decision-matrix.md](04-decision-matrix.md)).
+**Buy the dip / Sell the rally / Fade extremes** — [04-decision-matrix.md](04-decision-matrix.md).
 
 ## 3. Phạm vi (In Scope)
 
 | Hạng mục | Chi tiết |
 |----------|----------|
-| Platform | MetaTrader 5, MQL5 EA |
-| Symbols | Đúng 4 cặp nêu trên |
-| TF | Chỉ D1 + H1 cho quyết định |
-| Order type | Market (entry, DCA, payoff); partial/full close |
+| Platform | Python engine + MT5 API + SQLite + LLM agents |
+| Symbols | 4 cặp nêu trên |
+| TF | D1 + H1 |
+| Order | Market qua Executor queue |
 | States | FLAT, NORMAL, RECOVERY |
-| Alerts | Tùy chọn khi vào/ra RECOVERY, kill-switch |
-| Kill-switch | Thủ công (input / chart button / global variable) |
+| Kill-switch | Config / flag thủ công |
 
-## 4. Ngoài phạm vi (Out of Scope) — giai đoạn design
+## 4. Ngoài phạm vi
 
 | Hạng mục | Ghi chú |
 |----------|---------|
-| Code MQL5 | Chưa viết trong phase này |
-| Max drawdown auto-stop | **Cấm** dừng theo DD; chỉ clear lệnh hoặc kill-switch |
-| Max lot ceiling | **Không** có trần lot tối đa |
-| Pending / limit / stop entry | Không dùng cho entry tín hiệu |
-| Multi-timeframe khác (M15, H4…) | Không dùng cho decision core |
-| LLM tự bịa swing / thay HardValidator | Cấm — LLM chỉ diễn giải swing deterministic (Phase 2 A2A) |
+| Code production | Chưa trong phase design |
+| Max DD auto-stop | Cấm |
+| Max lot ceiling | Không |
+| LLM bịa swing | Cấm |
 
-## 5. Kiến trúc logic mức cao
+## 5. SAFETY RAILS vs HardValidator
+
+| Thuật ngữ | Định nghĩa |
+|-----------|------------|
+| **HardValidator** | Deterministic trong engine, **5 checks**: (1) matrix action hợp lệ, (2) spacing/ladder đúng, (3) RECOVERY cấm mở ngược, (4) NormalizeLot theo bước broker, (5) kill-switch. FAIL → không enqueue. |
+| **SAFETY RAILS** | Bao trùm: HardValidator + hysteresis D1 + ngưỡng PUSH (Enter=0.6, Ignore=0.4) + soft-zone WAIT + LLM veto clamp. |
+
+## 6. Soft zone H1
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     EA Orchestrator                         │
-│  OnTick → detect NewBar H1 → for each Symbol: PairAgent     │
-└───────────────┬─────────────────────────────────────────────┘
-                │
-    ┌───────────┼───────────┬──────────────┬──────────────────┐
-    ▼           ▼           ▼              ▼                  ▼
- Context     Signal      Decision      PositionMgr        RiskGate
- Engine      Engine      Matrix        (open/DCA/         (kill-switch,
- (D1)        (H1)        + State       close/partial)     direction lock,
-                         Machine                          cooldown)
+strength_final < 0.4           → bỏ qua (NEUTRAL)
+0.4 ≤ strength_final < 0.6     → WAIT + log "soft zone (chất lượng yếu)" — không entry
+strength_final ≥ 0.6           → đủ vào Decision Matrix
 ```
 
-Mỗi `PairAgent` giữ:
+## 7. Kiến trúc logic mức cao
 
-- `Context`, `PrevContext` (cho hysteresis)
-- `State` ∈ {FLAT, NORMAL, RECOVERY}
-- `BasketDir`, `TotalLot`, `LastEntryPrice` / `WorstAdversePrice`
-- `LadderStep` (bậc lot hiện tại)
-- `CooldownUntilBar`
+```
+Python Instance / symbol
+  Eyes (Structure + StrengthScore) → Snapshot
+  Agents A/B (+ MemoryPack) → HardValidator
+  → INSERT MarketOrderInfo PENDING
+  → Executor Thread → MT5
+  → PairState / Audit / Experience feedback
+```
 
-## 6. Mô hình vận hành đa cặp
+Chi tiết: [11-python-engine-notes.md](11-python-engine-notes.md), [10-sqlite-design.md](10-sqlite-design.md).
 
-| Chế độ | Tham số | Hành vi |
+## 8. Đa cặp
+
+| Chế độ | Default | Hành vi |
 |--------|---------|---------|
-| Độc lập (default) | `InpGlobalDirectionLock = false` | Mỗi cặp tự có `BasketDir`; 4 agent song song |
-| Global lock (optional) | `InpGlobalDirectionLock = true` | Khi bất kỳ cặp nào đang `BUY`/`SELL`, cặp khác **không** được mở hướng ngược global |
+| Độc lập | `GlobalDirectionLock=false` | Mỗi cặp `BasketDir` riêng |
+| Global lock | optional true | FLAT chỉ OPEN cùng `GlobalDir` |
 
-Định nghĩa lock (design):
+## 9. Constraints
 
-```
-GlobalDir = NONE | BUY | SELL
-  := suy ra từ tập BasketDir của các cặp đang có lệnh
+1. 4 cặp cố định.  
+2. D1+H1 only.  
+3. Quyết định nghiệp vụ neo H1 close (không repaint).  
+4. Mỗi cặp 1 hướng.  
+5. Không max-DD stop.  
+6. Kill-switch thủ công + clear lệnh.  
+7. Agents không OrderSend trực tiếp.
 
-Nếu GlobalDirectionLock AND GlobalDir != NONE:
-  Cặp FLAT chỉ được OPEN cùng chiều GlobalDir
-```
-
-## 7. Constraints hệ thống (khóa cứng)
-
-1. **4 cặp cố định** — không mở rộng symbol trong runtime.
-2. **D1 + H1 only** cho context/signal.
-3. **Market tại H1 close** — không delay sang bar sau cho entry tín hiệu.
-4. **Mỗi cặp 1 hướng** tại một thời điểm (`BasketDir` duy nhất).
-5. **Không max drawdown stop** — RECOVERY chạy đến `TotalLot == 0`.
-6. **Kill-switch thủ công** là cơ chế dừng khẩn cấp duy nhất ngoài clear lệnh tự nhiên.
-7. **Không repaint** — chỉ `shift ≥ 1`.
-
-## 8. Vòng đời tài liệu → code
+## 10. Vòng đời tài liệu → code
 
 ```
-Design Doc (đây) → Duyệt 4 Mermaid diagrams → Spec freeze
-    → Implement MQL5 EA + inputs
-    → Strategy Tester backtest (4 symbols)
-    → Forward / demo → Live
+Design Doc → Duyệt diagrams (D01–D09, A01–A08, E01–E03)
+  → Spec freeze → Implement Python engine + agents
+  → Forward / demo → Live
 ```
 
-Xem diagram tổng thể chu kỳ: [diagrams/D01-lifecycle-cycle.mmd](diagrams/D01-lifecycle-cycle.mmd).  
-Xem sơ đồ dữ liệu: [diagrams/D04-data-architecture.mmd](diagrams/D04-data-architecture.mmd).
+Diagrams: [D01](diagrams/D01-lifecycle-cycle.mmd), [D04](diagrams/D04-data-architecture.mmd), [D07](diagrams/D07-instance-architecture.mmd).

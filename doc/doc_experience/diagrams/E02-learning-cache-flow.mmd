@@ -10,10 +10,10 @@ flowchart TD
 
     subgraph LearnerEngine ["2. LessonLearner & Deduplication"]
         GenLesson["Phân tích Kết Quả PnL & Bối Cảnh (Context, Strength, Spacing)"]
-        CheckDedupe{"Đã tồn tại Lesson cùng\n(symbol + context + action + hash(trigger_cond))?"}
+        CheckDedupe{"Đã tồn tại Lesson cùng\n(symbol+context+action+lesson_type+hash)?"}
         IncOcc["Tăng occurrence_count\nCập nhật total_pl_usd, win/loss count, last_seen_at"]
         InsertNew["INSERT INTO Lessons\n(Status='ACTIVE', Severity=1..5, Template Text)"]
-        Invalidate["Xóa / Vô hiệu hóa MemoryCache liên quan\n(DELETE FROM MemoryCache WHERE symbol=? OR scope='all')"]
+        Invalidate["Xóa / Vô hiệu hóa MemoryCache\n(DELETE WHERE symbol=? OR scope IN group_all)"]
     end
 
     subgraph CacheEngine ["3. MemoryPackBuilder & Caching (T1 + T2)"]

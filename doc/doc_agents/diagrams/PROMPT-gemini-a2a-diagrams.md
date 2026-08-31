@@ -15,9 +15,10 @@ CHỈ xuất mã Mermaid hợp lệ. Không giải thích dài. Không viết co
 ## Prompt A01 — Sequence AUTO
 
 ```
-Đọc doc/doc_agents/06-entry-flow.md và 03-consensus-protocol.md.
-Vẽ sequenceDiagram: Orchestrator wake → AgentA plan → HardValidator → AgentB ballot
-→ challenge ≤2 → A OrderSend MT5 → WakeRequest C3 hoặc DEFER C1/C2.
+Đọc 06-entry-flow.md, 03-consensus-protocol.md, 13-experience-loop.md.
+sequenceDiagram: wake → get_memory_pack → A plan → HV → B ballot
+→ challenge ≤2 → A INSERT MarketOrderInfo PENDING → Executor claim OrderSend MT5
+→ Archive/FAILED → WakeRequest C3 hoặc DEFER C1/C2.
 Output ONLY sequenceDiagram.
 ```
 
@@ -27,8 +28,8 @@ Tham chiếu: [A01-a2a-sequence.mmd](A01-a2a-sequence.mmd)
 
 ```
 Đọc 03 + 11. stateDiagram-v2: SLEEPING, AUTO_CYCLE, BOSS_SESSION
-với Executing_A, Deferring, BossACK, BossOverride, về SLEEPING.
-BossWake từ SLEEPING và mid AUTO_CYCLE.
+Enqueueing (INSERT PENDING), Deferring; BOSS: B.APPROVE mới enqueue;
+B dissent → DEFER (KHÔNG BossOverride).
 Output ONLY stateDiagram-v2.
 ```
 
@@ -48,8 +49,8 @@ Tham chiếu: [A03-wakeup-and-monitor.mmd](A03-wakeup-and-monitor.mmd)
 ## Prompt A04 — DCA dual review
 
 ```
-Đọc 07-dca-dual-review-loop.md. flowchart TD từ wake OPEN:
-refresh lot → review → HardValidator → B ballot → exec/defer → wake C3 đến TotalLot=0.
+Đọc 07-dca-dual-review-loop.md. flowchart TD:
+wake → memory pack → review → HV → B → A INSERT PENDING → Executor → wake C3 đến flat.
 Output ONLY flowchart TD.
 ```
 
@@ -59,8 +60,8 @@ Tham chiếu: [A04-dca-dual-review.mmd](A04-dca-dual-review.mmd)
 
 ```
 Đọc 11-boss-interrupt-flow.md. sequenceDiagram:
-BossWake interrupts sleep → A/B wake → plan → HardPass → chat → BossACK
-→ CONSENSUS_WITH_BOSS hoặc BOSS_OVERRIDE_EXEC → A OrderSend → WakeRequest → sleep.
+BossWake → A/B → memory → plan → HV → chat → B.APPROVE → enqueue → Executor
+OR B dissent → DEFER (no Override v1).
 Output ONLY sequenceDiagram.
 ```
 
@@ -90,10 +91,19 @@ Output ONLY flowchart TD.
 
 Tham chiếu: [A07-h1-strength-pipeline.mmd](A07-h1-strength-pipeline.mmd)
 
+## Prompt A08 — DB queue
+
+```
+Đọc doc_phuong_phap/10-sqlite-design.md và A08-db-queue-flow.mmd.
+stateDiagram: PENDING → PROCESSING → ARCHIVED_DONE / FAILED / CANCELLED.
+Agents chỉ INSERT PENDING; Executor claim OrderSend.
+Output ONLY stateDiagram-v2.
+```
+
 ## Checklist
 
-- [ ] A01–A07 render trên Mermaid v10  
-- [ ] A có OrderSend; B không  
-- [ ] A06/A07 tách eyes / brain / rails  
-- [ ] Push threshold 0.6 trên cạnh matrix  
+- [ ] A01–A08 render Mermaid v10  
+- [ ] A enqueue; Executor OrderSend; B không enqueue  
+- [ ] Không BossOverride  
+- [ ] get_memory_pack trước plan trên A01/E03  
  

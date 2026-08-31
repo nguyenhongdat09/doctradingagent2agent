@@ -2,75 +2,62 @@
 
 ## 1. Mục tiêu
 
-Từ **FLAT**, sau khi agents đồng thuận, **Agent A** gửi lệnh MARKET BeginLot xuống sàn → chuyển **NORMAL**.
+FLAT → consensus → **A INSERT `MarketOrderInfo` PENDING** → Executor OrderSend BeginLot → NORMAL.
 
 ## 2. Preconditions
 
 ```
-PairState == FLAT
-TotalLot == 0
-¬KillSwitch
-HardValidator sẽ check: Context×Signal ∈ matrix OPEN_* (doc_phuong_phap 04)
+PairState == FLAT ∧ TotalLot == 0 ∧ ¬KillSwitch
+HardValidator: Context×PUSH≥0.6 ∈ matrix OPEN_*
 ```
 
 ## 3. Flow AUTO
 
 ```
-1. Wake (timer C1/C2 hoặc Boss — nếu Boss thì xem 11)
-2. A: MDA — fetch D1 → structure features → LLM+rails ContextFinal
-   → fetch H1 (+ATR) → fetch_more nếu cần (xem 12)
-3. A: H1 Strength Score + rails → MatrixAction (PUSH ≥ 0.6) → nếu WAIT: WakeRequest C1/C2 → sleep
-4. A: draft TradePlan(action=ENTRY, lot=L0=0.05, direction=..., strength_final, narrative)
-5. HardValidator(plan) — fail → sửa hoặc WAIT + wake
-6. B: tự đọc snapshot/features + MarketAssessment độc lập + ReviewBallot
-7. Nếu CHALLENGE and round < 2: A revise → lại B
-8. Nếu APPROVE: CONSENSUS_AUTO → A.OrderSend(MARKET)
-9. On fill: PairState=NORMAL, BasketDir=..., LadderStep=0
-10. A: WakeRequest dynamic (C3) vì đã có lệnh
+1. Wake
+2. get_memory_pack → A & B
+3. MDA: D1 structure → ContextFinal; H1 Strength Score → rails
+4. MatrixAction (chỉ strength_final ≥ 0.6); soft zone [0.4,0.6) = WAIT + log "soft zone"
+5. Draft TradePlan ENTRY
+6. HardValidator — fail → WAIT/wake
+7. B ballot (+ MemoryPack)
+8. CHALLENGE ≤2 → revise
+9. APPROVE → A.enqueue_order(PENDING)  // KHÔNG OrderSend
+10. Executor claim → MT5 → Archive / FAILED
+11. On success: PairState=NORMAL; WakeRequest C3
+12. (Sau này đóng lệnh) submit_feedback / record_lesson
 ```
 
-## 4. Flow khi DEFER (A≠B)
+## 4. DEFER
 
-Áp [03-consensus-protocol](03-consensus-protocol.md) C1/C2 — **không** OrderSend.
+C1/C2 — không enqueue.
 
-## 5. Checklist plan ENTRY (A phải điền)
+## 5. Checklist plan
 
 | Field | Ví dụ |
 |-------|--------|
-| symbol | AUDCAD |
 | direction | BUY |
 | lot | 0.05 |
-| context + structure | UPTREND, narrative, confidence |
+| context | UPTREND + narrative |
 | signal | PUSH_DOWN, strength_final=0.72 |
-| rule_refs | `UPTREND×STRONG_DOWN→OPEN_BUY` |
-| invalidation | Context flip + … |
+| rule_refs | `UPTREND×PUSH_DOWN→OPEN_BUY` |
 
-## 6. Sequence rút gọn & ExecutionReport
+## 6. Sequence
 
 ```
-Orch → A.wake
-A → Plan
-A → HardValidator
-B → Ballot
+Orch → A.wake → get_memory_pack
+A → Plan → HV → B Ballot
 alt APPROVE
-  A → MT5 OrderSend
-  MT5 Adapter → A (Order Result)
-  A → Orchestrator / MessageBus: ExecutionReport (status, tickets, fill_price)
-  Orchestrator → Log Audit & notify Agent B (và Boss nếu session_mode=BOSS)
+  A → INSERT MarketOrderInfo PENDING
+  Executor → OrderSend MT5
+  Executor → Archive + ExecutionReport
   A → WakeRequest(C3)
-else CHALLENGE
-  A revise (≤2)
 else DEFER
   A → WakeRequest(C1|C2)
 ```
 
-## 7. Xử lý ExecutionReport
+## 7. ExecutionReport
 
-1. **Sau khi MT5 trả về kết quả:** Agent A phát hành `ExecutionReport`.
-2. **Orchestrator:**
-   - Cập nhật `PairState = NORMAL` (nếu fill thành công).
-   - Ghi nhận `tickets`, `fill_price` vào `logs/audit.jsonl`.
-   - Chuyển `ExecutionReport` tới Agent B (để đồng bộ nhận thức vị thế) và kênh Boss (nếu đang trong BOSS mode).
-3. **Nếu OrderSend thất bại:** Orchestrator giữ `PairState = FLAT`, ghi lỗi vào audit log, và Agent A gửi `WakeRequest` chu kỳ ngắn để retry/re-evaluate.
+Executor (không phải A) phát sau MT5. FAILED → PairState giữ FLAT nếu chưa fill; alert; A có thể wake ngắn retry/re-eval.
 
-Diagram đầy đủ: [diagrams/A01-a2a-sequence.mmd](diagrams/A01-a2a-sequence.mmd).
+Diagram: [A01](diagrams/A01-a2a-sequence.mmd), [A08](diagrams/A08-db-queue-flow.mmd).

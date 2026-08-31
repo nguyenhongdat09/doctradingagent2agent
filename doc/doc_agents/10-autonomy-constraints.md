@@ -1,41 +1,40 @@
 # 10 — Autonomy & Constraints
 
-## 1. Mặc định: 0-human
+> **NGUYÊN TẮC BẤT BIẾN (ALL-LLM):** MỌI quyết định giao dịch (ENTRY, DCA, RECOVERY_DCA, PAYOFF_REDUCE, CLOSE_ALL, PARTIAL_CLOSE, kể cả WAIT) do Agent A+B phân tích và consensus. **KHÔNG có rule cứng tự động** kiểu EA truyền thống. Engine (mắt) chỉ là nguồn dữ liệu.
 
-Trong `session_mode=AUTO`, hệ thống chạy liên tục không cần Boss. A↔B đủ để vào lệnh / DCA / close theo protocol.
+## 1. Mặc định 0-human (AUTO)
 
-## 2. Ngoại lệ có kiểm soát
+A↔B đủ để enqueue; Executor đánh lệnh. Boss không cần có mặt.
+
+## 2. Ngoại lệ
 
 | Ngoại lệ | Mục đích |
 |----------|----------|
-| BossWake / BOSS session | Bạn can thiệp khi agents ngủ mà market ok |
-| BossOverride | Chốt khi B dissent — **audit bắt buộc** |
-| KillSwitch / Flatten | Dừng khẩn cấp out-of-band |
-| `BOSS_FORCE` (default OFF) | Experimental: cho phép Boss ép qua HardValidator — **không khuyến nghị** |
+| BossWake / hội đồng | Boss can thiệp khi agents ngủ — **chỉ bàn, không Override v1** |
+| KillSwitch / Flatten | Emergency out-of-band → Boss/operator bật **thủ công** → Executor flatten qua queue |
+| SYSTEM_FREEZE | LLM down → đóng băng toàn bộ + alert Boss — Boss là bộ não dự phòng duy nhất |
 
-## 3. Ràng buộc không đàm phán
+## 3. Ràng buộc KHÔNG đàm phán
 
-1. Chỉ Agent A OrderSend.  
-2. AUTO cần B.APPROVE hợp lệ.  
-3. BOSS cần BossACK.  
-4. HardValidator PASS (khi BOSS_FORCE=false).  
-5. Mỗi DCA/material action cần dual-review (hoặc Boss path đủ điều kiện).  
-6. RECOVERY: không mở ngược hướng (phuong_phap).  
-7. Không max-DD auto-stop (phuong_phap); chỉ sạch lệnh / kill / Boss flatten.  
-8. Ballot B thiếu counter_evidence → không APPROVE.
+1. **MỌI action vào/ra/sửa vị thế** phải qua Agent A+B consensus + HardValidator.
+2. **KHÔNG có rule cứng tự động** ra lệnh — engine chỉ cung cấp dữ liệu/gợi ý.
+3. AUTO/BOSS đều cần B.APPROVE hợp lệ.
+4. HardValidator PASS trước enqueue.
+5. Không `BossOverride` / `BOSS_FORCE` ở v1.
+6. RECOVERY không mở ngược.
+7. Ballot thiếu evidence → không APPROVE.
+8. **Khi LLM down**: SYSTEM_FREEZE — KHÔNG auto-degrade về rule-only; Boss can thiệp thủ công.
+9. **Kill-switch KHÔNG tự kích hoạt** — chỉ Boss/operator bật thủ công.
 
-## 4. Wake constraints
+## 4. Phân tầng trách nhiệm
 
-- FLAT: tuân C1/C2 (+30m / H1+30m).  
-- OPEN: dynamic trong [WakeMin, WakeMax].  
-- BossWake luôn interrupt được.
+| Thành phần | Vai trò | Được làm | KHÔNG được làm |
+|---|---|---|---|
+| **Engine (mắt)** | Cảm biến + máy tính | Tính swing, score, spacing, snapshot; gợi ý | Enqueue lệnh, quyết định action |
+| **LLM A+B (não)** | Người quyết định duy nhất | Phân tích → đề xuất → phản biện → consensus | — |
+| **Executor (tay)** | Thực thi cơ khí | Claim PENDING → OrderSend MT5 → Archive | Quyết định BUY/SELL, sửa plan |
+| **Boss (giám sát)** | Can thiệp ngoại lệ | BossWake, bàn luận, kill-switch thủ công | Override v1, OrderSend |
 
-## 5. Audit & trách nhiệm
+## 5. Audit
 
-Mọi `BOSS_OVERRIDE_EXEC` và mọi OrderSend lưu đủ plan_id, ballot, boss reason. Boss chịu trách nhiệm quyết định override; A chịu trách nhiệm thực thi đúng plan đã chốt; B chịu trách nhiệm chất lượng phản biện.
-
-## 6. Bảo mật kênh Boss
-
-- Xác thực Boss channel (token / local-only CLI).  
-- Không expose OrderSend ra Boss trực tiếp.  
-- Rate-limit BossWake để tránh spam interrupt.
+Mọi enqueue + ExecutionReport lưu plan_id, ballot, queue_row_id, tickets.

@@ -23,8 +23,11 @@ NORMAL / RECOVERY **không** mở hướng mới theo matrix (xem [06](06-state-
 
 ```
 function MatrixAction(Context, verdict, strength_final):
-  if strength_final < InpPushIgnore: return WAIT
-  if strength_final < InpPushEnter: return WAIT      // soft zone
+  if strength_final < InpPushIgnore:          # < 0.4
+      return WAIT
+  if strength_final < InpPushEnter:           # [0.4, 0.6)
+      log("soft zone (chất lượng yếu)")
+      return WAIT
   if verdict in {NEUTRAL, EXHAUSTION}: return WAIT
 
   if Context == UPTREND:

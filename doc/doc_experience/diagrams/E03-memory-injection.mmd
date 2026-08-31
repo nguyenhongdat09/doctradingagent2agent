@@ -33,9 +33,10 @@ sequenceDiagram
     end
 
     A->>V: Trình TradePlan + Ballots
-    alt HardValidator PASS (EnforceTopLessons = false hoặc pass rails)
-        V->>Q: INSERT INTO MarketOrderInfo (status='PENDING')
-        V->>Exp: Ghi nhận LessonFeedback(plan_id, applied=1)
-    else FAIL
-        V->>Exp: Ghi nhận LessonFeedback(plan_id, applied=0, outcome='FAIL')
+    alt HardValidator PASS
+        V->>Q: INSERT INTO MarketOrderInfo status=PENDING
+        Note over Exp: Feedback đầy đủ sau khi Executor đóng lệnh
+    else HardValidator FAIL
+        V->>Exp: submit_feedback applied=0 outcome=NA
+        Note over Q: Không enqueue
     end

@@ -1,51 +1,35 @@
 # 08 — Map A2A ↔ Phương pháp DCA
 
-Tham chiếu đầy đủ: [`../doc_phuong_phap/`](../doc_phuong_phap/).
+Tham chiếu: [`../doc_phuong_phap/`](../doc_phuong_phap/), [`../doc_experience/`](../doc_experience/).
 
-## 1. Ai tính rule?
+## 1. Ai làm gì
 
-| Rule | Agent A | Agent B | HardValidator |
-|------|---------|---------|---------------|
-| D1 Context (structure + rails) | Diễn giải LLM + ghi plan | Tự diễn giải độc lập | Enforce swing deterministic + rails + matrix |
-| H1 Strength Score + rails | Tính/diễn giải | Tự đánh giá độc lập | Enforce PushEnter 0.6 + matrix |
-| Decision matrix (FLAT) | Đề xuất OPEN_* | Có thể REJECT nếu lệch matrix | Enforce matrix |
-| Spacing / ladder | Đề xuất DCA lot | Phản biện timing | Enforce spacing & lot step |
-| Basket TP NORMAL | Đề xuất CLOSE_ALL | Phản biện | Enforce FavorableSqueeze + TpMoney |
-| RECOVERY branches | Đề xuất | Phản biện | Cấm mở ngược; stay RECOVERY đến flat |
-| OrderSend | **Thực thi** | — | Gate trước exec |
+| Rule | A | B | HardValidator | Executor |
+|------|---|---|---------------|----------|
+| D1 structure + rails | Diễn giải | Độc lập | Enforce | — |
+| H1 Strength / PUSH≥0.6 | Diễn giải | Độc lập | Enforce | — |
+| Matrix / spacing / RECOVERY | Đề xuất | Phản biện | 5 checks | — |
+| MemoryPack | get trước plan | get trước ballot | optional EnforceTopLessons | — |
+| Enqueue | **R** | — | Gate | — |
+| OrderSend MT5 | — | — | — | **R** |
 
-## 2. Map ActionProposal → PairState transition
+## 2. Action → PairState
 
-| A2A action | Điều kiện phuong_phap | State sau |
-|------------|----------------------|-----------|
-| ENTRY | FLAT + matrix OPEN | NORMAL |
-| DCA | NORMAL + spacing | NORMAL hoặc RECOVERY nếu TotalLot≥R_TH |
-| CLOSE_ALL | NORMAL + squeeze + TpMoney | FLAT |
-| RECOVERY_DCA | RECOVERY + AdverseSqueeze + spacing | RECOVERY |
-| PAYOFF_REDUCE | RECOVERY + FavorableSqueeze | RECOVERY hoặc FLAT nếu lot=0 |
-| WAIT | bất kỳ | không đổi |
+| A2A / queue action | Điều kiện | State sau |
+|--------------------|-----------|-----------|
+| OPEN_BUY / OPEN_SELL (ENTRY) | FLAT + matrix | NORMAL |
+| DCA | NORMAL + spacing | NORMAL hoặc RECOVERY nếu ≥R_TH |
+| CLOSE_ALL | Favorable PUSH≥0.6 + TpMoney | FLAT |
+| RECOVERY_DCA | RECOVERY + Adverse PUSH≥0.6 | RECOVERY |
+| PAYOFF_REDUCE / PARTIAL_CLOSE | RECOVERY favorable | RECOVERY hoặc FLAT |
+| WAIT | — | không đổi |
 
-> **Ghi chú về `ENTER_RECOVERY` & `EXIT_TO_FLAT`:** Trong glossary, 2 mục này là **chuyển trạng thái nội bộ** (state machine transition) do biến động `TotalLot` sau khớp lệnh, không phải hành động gửi qua A2A proposal.
+`ENTER_RECOVERY` / `EXIT_TO_FLAT` = transition nội bộ theo TotalLot ([phuong glossary](../doc_phuong_phap/00-glossary.md)).
 
-## 3. Tín hiệu vs wake
+## 3. Enum chuẩn
 
-```
-HardValidator cho ENTRY/DCA dựa trên signal:
-  dùng H1[1] đã đóng (không repaint) — giống doc_phuong_phap
+Xem [00-glossary.md](00-glossary.md) §7 — thống nhất `OPEN_*`, `DCA`, `RECOVERY_DCA`, `PAYOFF_REDUCE`, `CLOSE_ALL`, `PARTIAL_CLOSE`, `WAIT`.
 
-Wake giữa H1:
-  agents được bàn → thường action=WAIT
-  hoặc chuẩn bị plan dự kiến chờ close
-```
+## 4. Kill-switch
 
-## 4. Tham số không đổi
-
-BeginLot 0.05, TP 30 pip, R_TH 0.3, StrongMult 1.5, Breakout 3, spacing coefs, payoff 15–30% — giữ nguyên [08-parameters](../doc_phuong_phap/08-parameters.md). A2A **không** thay số này trừ khi Boss+config change (ngoài scope thường).
-
-## 5. Global direction lock
-
-Nếu `InpGlobalDirectionLock=true` trong phương pháp: HardValidator từ chối ENTRY ngược `GlobalDir`. B có thể nêu thêm lý do risk.
-
-## 6. Kill-switch
-
-Phuong_phap: thủ công. A2A: Boss/orch emergency → A không OrderSend mới; optional flatten (10).
+→ không enqueue mới; optional flatten qua queue CLOSE_ALL.

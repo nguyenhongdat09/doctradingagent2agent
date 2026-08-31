@@ -6,7 +6,7 @@
 Bars(D1,H1)
   → StructureEngine (swings, BOS, range_compress)   // mắt deterministic
   → [optional LLM interpret] → SAFETY_RAILS → Context
-  → SignalEngine (H1 ATR breakout)
+  → SignalEngine (H1 Strength Score)
   → Decision / StateMachine
   → PositionManager ↔ AccountInfo
        ↑

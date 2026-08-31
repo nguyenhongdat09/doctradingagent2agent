@@ -59,20 +59,22 @@ CREATE INDEX idx_lessons_ranking ON Lessons(status, severity DESC, occurrence_co
 
 -- 2. BẢNG BỘ NHỚ ĐỆM MEMORYPACK (MemoryCache)
 CREATE TABLE MemoryCache (
-    cache_key TEXT PRIMARY KEY,          -- Khóa dạng: '<symbol>|<context_type>|<action_type>' (vd: 'AUDCAD|UPTREND|ENTRY')
+    cache_key TEXT PRIMARY KEY,          -- '<symbol>|<context_type>|<action_type>'
     symbol TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'symbol' CHECK(scope IN ('symbol', 'group', 'all')),
     context_type TEXT NOT NULL,
     action_type TEXT NOT NULL,
-    pack_text TEXT NOT NULL,             -- Nội dung chuỗi Markdown đã kết xuất hoàn chỉnh (T1 + T2)
-    token_estimate INTEGER NOT NULL,     -- Ước lượng số token của pack_text
-    lesson_ids TEXT NOT NULL,            -- Danh sách JSON các lesson_id được đưa vào pack (vd: "[1, 5, 12]")
-    content_hash TEXT NOT NULL,          -- Mã hash SHA256 kiểm tra thay đổi nội dung
+    pack_text TEXT NOT NULL,
+    token_estimate INTEGER NOT NULL,
+    lesson_ids TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
     ttl_seconds INTEGER NOT NULL DEFAULT 3600,
     built_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_memory_cache_lookup ON MemoryCache(symbol, context_type, action_type);
+CREATE INDEX idx_memory_cache_scope ON MemoryCache(scope, symbol);
 
 -- 3. BẢNG HỒ SƠ ĐẶC TÍNH CẶP TIỀN (PairProfiles)
 CREATE TABLE PairProfiles (
@@ -141,8 +143,8 @@ Trong đó:
    - $\text{ScopeRelevance}$: Đúng cặp ($\text{symbol}$) = $1.0$; Cùng nhóm ($\text{group}$) = $0.7$; Dùng chung ($\text{all}$) = $0.5$.
    - $\text{ContextRelevance}$: Đúng bối cảnh hiện tại = $1.0$; Bối cảnh chung (`ANY`) = $0.4$.
 4. **Hao mòn theo thời gian ($\text{TimeDecay}$):**
-   $$\text{TimeDecay} = 0.6^{\Delta t_{\text{days}}}$$
-   *(Bài học càng lâu không xuất hiện sẽ tự giảm dần độ ưu tiên).*
+   $$\text{TimeDecay} = 0.9^{\Delta t_{\text{days}}}$$
+   *(Bài học cũ giảm chậm hơn — vẫn học được từ lỗi nhiều ngày trước).*
 
 ---
 
@@ -155,16 +157,16 @@ Trong đó:
      - Lệnh bị từ chối/thất bại (`FAILED` hoặc vi phạm Safety Rails).
      - Kết thúc chu kỳ Cooldown.
 2. **Chống trùng lặp (Deduplication):**
-   - Khi phát hiện bài học mới, hệ thống băm chuỗi nhận diện:
-     $$\text{Hash} = \text{SHA256}(\text{symbol} + \text{context\_type} + \text{action\_type} + \text{trigger\_cond})$$
+   - Hash dedupe nên gồm thêm `lesson_type` để AVOID/PREFER không đụng nhau:
+     $$\text{Hash} = \text{SHA256}(\text{symbol} + \text{context\_type} + \text{action\_type} + \text{lesson\_type} + \text{trigger\_cond})$$
    - Nếu đã tồn tại Lesson trùng Hash:
-     - Thực hiện `UPDATE Lessons SET occurrence_count = occurrence_count + 1, total_pl_usd = total_pl_usd + ?, last_seen_at = CURRENT_TIMESTAMP WHERE lesson_id = ?`.
-     - Tuyệt đối không chèn thêm dòng mới để chống rác database.
-   - Nếu chưa tồn tại: Thực hiện `INSERT INTO Lessons`.
+     - `UPDATE` tăng `occurrence_count`, cộng `total_pl_usd`, cập nhật `win_count`/`loss_count` nếu có, `last_seen_at`.
+     - Không INSERT dòng mới.
+   - Nếu chưa tồn tại: `INSERT INTO Lessons`.
 3. **Vô hiệu hóa Cache (Cache Invalidation):**
-   - Khi có bất kỳ `INSERT` hoặc `UPDATE` nào trên bảng `Lessons`, toàn bộ bản ghi `MemoryCache` liên quan đến `symbol` đó sẽ bị xóa/đánh dấu hết hạn để chu kỳ tiếp theo tự động build lại.
-4. **Tự động đào thải (Downgrade / Archiving):**
-   - Thông qua bảng `LessonFeedback`: Nếu một bài học được áp dụng nhưng dẫn đến kết quả tiêu cực liên tiếp $\ge 3$ lần, trạng thái của nó sẽ chuyển thành `SUPERSEDED` hoặc `ARCHIVED`.
+   - Khi INSERT/UPDATE `Lessons`: xóa/expire `MemoryCache` với cùng `symbol` **hoặc** `scope IN ('group','all')` liên quan.
+4. **Tự động đào thải:**
+   - Qua `LessonFeedback`: áp dụng mà `outcome='LOSS'` liên tiếp ≥ 3 → `SUPERSEDED` / `ARCHIVED`.
 
 ---
 
@@ -176,18 +178,92 @@ Trong đó:
   - Tổng token nạp Memory: $\approx 21.6\text{k tokens/ngày/cặp}$.
   - Chi phí ước tính (DeepSeek-V3 / GPT-4o-mini): $\approx \$0.006 \sim \$0.02 \text{ USD/ngày/cặp}$.
   - Ghi nhận đầy đủ vào bảng `LLMRuns` với mục đích: `purpose = 'memory_pack'`.
-- **Python Tool Cung Cấp Cho Agents:**
+- **Python Tools:**
   ```python
-  def get_memory_pack(symbol: str, context_type: str, action_type: str) -> str:
-      """
-      Trả về chuỗi Markdown cô đọng (T1 + T2 <= 500 tokens) để inject trực tiếp vào prompt của Agent A và Agent B.
-      Tự động đọc từ MemoryCache nếu còn hiệu lực (TTL 3600s).
-      """
+  def get_memory_pack(symbol: str, context_type: str, action_type: str) -> str: ...
+  def record_lesson(...) -> int: ...          # qua LessonWriter single-writer
+  def evaluate(plan: dict, outcome: str) -> None: ...
+  def submit_feedback(lesson_id: int, outcome: str, pl: float, plan_id: str) -> None: ...
   ```
+  Chi tiết map agents: [02-map-to-agents.md](02-map-to-agents.md).
 
 ---
 
-## 7. SO SÁNH `experience.db` VÀ `dca_<symbol>.db`
+## 7. THUẬT TOÁN XÂY DỰNG MEMORYPACK (MemoryPack Builder)
+
+```
+function build_memory_pack(symbol, context_type, action_type) -> str:
+  cache_key = f"{symbol}|{context_type}|{action_type}"
+
+  // Check cache
+  cached = MemoryCache.get(cache_key)
+  if cached and cached.expires_at > now():
+    return cached.pack_text
+
+  // TẦNG 1: Profile & Evergreen (≤ 150 tokens)
+  profile = PairProfiles.get(symbol).profile_short    // ≤ 300 ký tự
+  evergreen = Lessons.query(
+    symbol=symbol, status='ACTIVE', severity=5
+  ).order_by(occurrence_count.desc()).limit(2)
+
+  t1_text = f"## Profile {symbol}\n{profile}\n"
+  for lesson in evergreen:
+    t1_text += f"- {lesson.lesson_text}\n"
+
+  // TẦNG 2: Dynamic Ranked Lessons (≤ 350 tokens)
+  candidates = Lessons.query(
+    (symbol=symbol OR scope IN ('group','all')),
+    context_type IN (context_type, 'ANY'),
+    action_type IN (action_type, 'ANY'),
+    status='ACTIVE',
+    severity < 5    // evergreen đã ở T1
+  )
+
+  for c in candidates:
+    c.score = compute_score(c, symbol, context_type)
+
+  top6 = candidates.order_by(score.desc()).limit(6)
+
+  t2_text = "## Bài học theo bối cảnh\n"
+  for lesson in top6:
+    t2_text += f"- {lesson.lesson_text}\n"
+
+  // Gộp + estimate tokens
+  pack_text = t1_text + "\n" + t2_text
+  token_est = estimate_tokens(pack_text)
+
+  // Trim nếu vượt 500 tokens
+  if token_est > 500:
+    // Giảm T2 xuống top 4 hoặc trim lesson_text
+    ...
+
+  // Ghi cache
+  content_hash = sha256(pack_text)
+  lesson_ids = [l.lesson_id for l in evergreen + top6]
+  MemoryCache.upsert(
+    cache_key, symbol, context_type, action_type,
+    pack_text, token_est, lesson_ids, content_hash,
+    ttl_seconds=3600, expires_at=now()+3600
+  )
+
+  return pack_text
+```
+
+Hàm scoring (nhắc lại từ §4):
+$$\\text{Score} = \\text{Severity}^2 \\times (1 + \\ln(\\text{occurrence\\_count})) \\times \\text{Relevance} \\times \\text{TimeDecay}$$
+
+---
+
+## 8. CONCURRENCY `experience.db` (đa instance)
+
+| Quy tắc | Chi tiết |
+|---------|----------|
+| PRAGMA | `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON` |
+| Single-writer | **LessonWriter** duy nhất (process/thread) ghi `Lessons` / invalidate cache |
+| Readers | Mọi instance cặp **chỉ đọc** qua `MemoryCache` / `get_memory_pack` |
+| Không | Nhiều instance INSERT Lessons đồng thời |
+
+## 9. SO SÁNH `experience.db` VÀ `dca_<symbol>.db`
 
 | Tiêu chí | `experience.db` (Bộ Nhớ Kinh Nghiệm) | `dca_<symbol>.db` (Database Vận Hành Cặp) |
 |:---|:---|:---|

@@ -87,8 +87,8 @@ function ClassifyStructureContext(features, PrevContext):
   if candidate == PrevContext:
       return PrevContext
   if đủ xác nhận đổi:
-      // cần 2 swing cùng dấu liên tiếp xác nhận hướng mới
-      // HOẶC 1 BOS ngược hướng mạnh (InpHysteresisMode)
+      // HysteresisNeedTwoSwings: 2 swing cùng dấu liên tiếp
+      // HOẶC HysteresisAllowStrongBOS: BOS ngược mạnh (≥ BosStrengthATR × ATR14_D1)
       return candidate
   else:
       return PrevContext   // giữ cũ

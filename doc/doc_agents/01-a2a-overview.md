@@ -2,77 +2,79 @@
 
 ## 1. Mục tiêu
 
-Xây hệ thống **Agents-to-Agents** tự chạy giao dịch DCA trên 4 cặp (`AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`) theo phương pháp đã khóa trong [`doc_phuong_phap`](../doc_phuong_phap/):
+Xây hệ thống **Agents-to-Agents** tự chạy giao dịch DCA trên 4 cặp (`AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`) theo [`doc_phuong_phap`](../doc_phuong_phap/):
 
-- **Mặc định 0-human:** A và B tự quan sát, tranh luận, đồng thuận; **A gửi lệnh** xuống MT5.
-- **Boss interrupt (optional):** Bạn có thể prompt đánh thức agents đang ngủ, trao đổi, chốt plan; A vẫn execute.
-- **Orchestrator Python:** chỉ timer, bus, ingest Boss — không quyết BUY/SELL.
+- **Mặc định 0-human:** A và B quan sát, tranh luận, đồng thuận; **A chỉ INSERT** lệnh vào SQLite queue.
+- **Executor Thread** (thường trực) claim `MarketOrderInfo` → OrderSend MT5 → Archive/FAILED.
+- **Boss interrupt (v1):** `BossWake` + bàn luận 3 bên; **không** Override — quyết định cuối luôn A+B + HardValidator.
+- **Orchestrator Python:** timer, bus, ingest Boss — không quyết BUY/SELL.
 
 ## 2. Phân tầng trách nhiệm
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ Boss (optional interrupt)                                 │
+│ Boss (optional): BossWake + bàn luận — KHÔNG override v1 │
 └─────────────┬────────────────────────────────────────────┘
-              │ BossWake / ACK / Override
+              │ BossWake / BossACK (góp ý)
 ┌─────────────▼────────────────────────────────────────────┐
-│ Orchestrator (Python): scheduler, bus, session_mode      │
+│ Orchestrator: scheduler, bus, session_mode, HardValidator│
 └───────┬─────────────────────────────┬────────────────────┘
-        │ wake / messages             │ wake / messages
+        │                             │
 ┌───────▼────────┐             ┌──────▼──────────┐
 │ Agent A        │◄──debate──►│ Agent B         │
-│ Plan+Execute   │             │ Challenge       │
+│ Planner        │             │ Challenger      │
 └───────┬────────┘             └─────────────────┘
-        │ OrderSend (tools)
+        │ INSERT MarketOrderInfo (PENDING)
 ┌───────▼────────┐
-│ MT5 / Broker   │
-└────────────────┘
-        ▲
-┌───────┴────────┐
-│ HardValidator  │◄── doc_phuong_phap rules
+│ SQLite dca_*.db│
+└───────┬────────┘
+        │ Executor claim → PROCESSING
+┌───────▼────────┐
+│ Executor Thread│── OrderSend / Close ──► MT5
 └────────────────┘
 ```
 
 ## 3. Hai chế độ vận hành
 
-| Mode | Khi nào | Điều kiện vào lệnh |
-|------|---------|-------------------|
-| `AUTO` | Mặc định | HardPass ∧ B.APPROVE → A OrderSend |
-| `BOSS` | Sau BossWake | HardPass ∧ BossACK ∧ (B.APPROVE ∨ BossOverride) → A OrderSend |
+| Mode | Khi nào | Điều kiện ghi queue |
+|------|---------|---------------------|
+| `AUTO` | Mặc định | HardPass ∧ B.APPROVE → A INSERT `MarketOrderInfo` |
+| `BOSS` | Sau BossWake | HardPass ∧ B.APPROVE (Boss chỉ bàn; **không** Override) → A INSERT |
+
+Nếu B dissent trong BOSS → **DEFER** (kể cả khi Boss muốn đi tiếp).
 
 ## 4. Liên kết phương pháp
 
-| Tầng phương pháp | Ai dùng |
-|------------------|---------|
-| D1 structure swings + SAFETY RAILS (+ LLM não) | A/B diễn giải; HardValidator clamp |
-| H1 signal, matrix | A lập plan; B phản biện |
-| Spacing, ladder, R_TH, RECOVERY | HardValidator + A đề xuất |
-| State FLAT/NORMAL/RECOVERY | Persist; A cập nhật sau fill |
-
-Chi tiết map: [08-map-to-phuong-phap.md](08-map-to-phuong-phap.md).
+| Tầng | Ai dùng |
+|------|---------|
+| D1 structure + SAFETY RAILS | A/B + HardValidator |
+| H1 Strength Score / PUSH≥0.6 | A/B + HardValidator |
+| Spacing, ladder, RECOVERY | HardValidator + A đề xuất |
+| Experience MemoryPack | A/B trước plan; feedback sau đóng lệnh — [`../doc_experience/`](../doc_experience/) |
 
 ## 5. Vòng đời mức cao
 
 1. Sleep đến `next_wake_at` **hoặc** BossWake.  
-2. A (và B) quan sát market.  
-3. A draft plan / proposal.  
-4. B ballot độc lập (± Boss hội thoại nếu BOSS).  
-5. Consensus / Defer / Override.  
-6. Nếu execute-ok → **A OrderSend**.  
-7. A set WakeRequest theo C1–C3 → Sleep.
+2. `get_memory_pack` → A/B.  
+3. A quan sát + draft plan.  
+4. B ballot (± Boss chat nếu BOSS).  
+5. Consensus / Defer (không Override).  
+6. HardPass → **A INSERT queue** → Executor OrderSend.  
+7. Sau đóng lệnh: `submit_feedback` / `record_lesson`.  
+8. A set WakeRequest → Sleep.
 
-## 6. Phạm vi phase này
+## 6. SAFETY RAILS vs HardValidator
 
-| In scope (doc) | Out of scope |
-|----------------|--------------|
-| Protocol, schema, diagram | Implement LLM prompts production |
-| Boss channel design | UI chat đầy đủ |
-| Map sang phuong_phap | Code MT5 / backtest |
+Xem mục chung trong [`../doc_phuong_phap/01-system-overview.md`](../doc_phuong_phap/01-system-overview.md) § Safety.
+
+Tóm tắt:
+- **HardValidator** = 5 checks deterministic trong engine (matrix, spacing/ladder, RECOVERY no reverse, NormalizeLot, kill-switch).
+- **SAFETY RAILS** = khái niệm bao trùm (HardValidator + hysteresis + ngưỡng PUSH 0.6 + soft-zone WAIT).
 
 ## 7. Nguyên tắc thiết kế
 
-1. **Single executor:** chỉ A gọi lệnh sàn → audit một điểm.  
-2. **Independent challenger:** B phải có `counter_evidence`.  
-3. **Hard rules > ý kiến LLM/Boss** (BossOverride không phá HardValidator khi `BOSS_FORCE=false`).  
-4. **Interruptible sleep:** BossWake luôn thắng timer.  
-5. **Mỗi material action** (entry, DCA, payoff, close basket) cần dual-review (AUTO) hoặc Boss path.
+1. **Queue-only:** Agents không OrderSend trực tiếp.  
+2. **Single writer lệnh sàn:** chỉ Executor Thread.  
+3. **Independent challenger:** B có `counter_evidence`.  
+4. **Boss v1 advisory only.**  
+5. Mọi material action cần dual-review (AUTO) hoặc hội đồng Boss (vẫn cần A+B).  
