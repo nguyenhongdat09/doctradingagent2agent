@@ -1,0 +1,77 @@
+%% ============================================================================
+%% SƠ ĐỒ LUỒNG UNCERTAINTY ESCALATION (Agent → Boss via Telegram)
+%% 4 luồng: A escalate, B escalate, Timeout, Cả A+B escalate
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+
+    participant E as Engine (Mắt)
+    participant A as Agent A (Planner)
+    participant B as Agent B (Challenger)
+    participant Orch as Orchestrator
+    participant DB as escalation_tickets
+    participant TG as Telegram Bot
+    participant Boss as Boss (Bạn)
+
+    %% === LUỒNG 1: Agent A mơ hồ, Boss reply đúng giờ ===
+    rect rgb(230, 245, 255)
+    Note over A,Boss: Luồng 1 — Agent A mơ hồ khi phân tích
+    E->>A: MarketSnapshot + MemoryPack
+    A->>A: Phân tích → uncertainty_score > 0.6
+    A->>Orch: escalate_to_boss(category, question, analysis)
+    Orch->>DB: INSERT ticket (source_agent=A, status=WAITING)
+    Orch->>TG: Format tin nhắn tiếng Việt
+    TG->>Boss: 🤔 Agent A cần ý kiến Boss — AUDCAD
+
+    Note over Orch,TG: ⏳ Đợi tối đa 30 phút
+
+    Boss->>TG: Reply text chi tiết (tiếng Việt)
+    TG->>Orch: Nhận response
+    Orch->>DB: UPDATE (status=RESPONDED, boss_response=...)
+    Orch->>A: Inject boss_response vào context (như prompt)
+    A->>A: Tiếp tục phân tích với input Boss
+    A->>B: TradePlan (ghi chú: có BossAdvisory)
+    B->>B: Ballot độc lập (không bias bởi Boss)
+    end
+
+    %% === LUỒNG 2: Agent B mơ hồ khi ballot ===
+    rect rgb(255, 243, 224)
+    Note over A,Boss: Luồng 2 — Agent B mơ hồ khi ballot (y hệt A)
+    A->>B: TradePlan
+    B->>B: Đọc plan + snapshot → uncertainty_score > 0.6
+    B->>Orch: escalate_to_boss(category, question, analysis)
+    Orch->>DB: INSERT ticket (source_agent=B, status=WAITING)
+    Orch->>TG: Format tin nhắn tiếng Việt
+    TG->>Boss: 🤔 Agent B cần ý kiến Boss — AUDCAD
+
+    Note over Orch,TG: ⏳ Đợi tối đa 30 phút
+
+    Boss->>TG: Reply text chi tiết
+    TG->>Orch: Nhận response
+    Orch->>DB: UPDATE (status=RESPONDED, boss_response=...)
+    Orch->>B: Inject boss_response vào context (như prompt)
+    B->>B: Ballot với input bổ sung từ Boss
+    B->>A: ReviewBallot
+    end
+
+    %% === LUỒNG 3: Timeout 30 phút ===
+    rect rgb(255, 235, 238)
+    Note over A,Boss: Luồng 3 — Timeout 30 phút (áp dụng CẢ A lẫn B)
+    A->>Orch: escalate_to_boss(category, question)
+    Orch->>DB: INSERT ticket (status=WAITING)
+    Orch->>TG: Gửi câu hỏi
+    TG->>Boss: Tin nhắn escalation
+
+    Note over Orch,TG: ⏳ 30 phút trôi qua... Boss chưa reply
+
+    Orch->>DB: UPDATE (status=SELF_RESOLVED, self_resolution=...)
+    Orch->>A: Timeout → Agent tự quyết theo data
+
+    Note over Boss: Boss reply SAU 30 phút
+    Boss->>TG: Reply trễ
+    TG->>Orch: Late response detected
+    Orch->>DB: UPDATE (late_boss_response=...)
+    Orch->>TG: Gửi thông báo
+    TG->>Boss: ⚠️ Đã tự quyết theo giải pháp [ABC]
+    end

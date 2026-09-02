@@ -225,3 +225,70 @@ Khi LLM khôi phục:
 - Enqueue chỉ sau HardPass ∧ B.APPROVE.
 - **ALL-LLM:** MỌI action (kể cả DCA NORMAL, WAIT) phải qua A+B consensus. Engine KHÔNG tự enqueue.
 - **SYSTEM_FREEZE:** Khi `freeze=true`, mọi enqueue bị chặn — chỉ Boss can thiệp thủ công.
+
+## 10. UncertaintyEscalation (Agent A hoặc B → Orchestrator → Telegram → Boss)
+
+> **Tính năng mới:** Agent chủ động hỏi Boss qua Telegram khi mơ hồ về phân tích.
+> Agent A và B có quyền escalate **NGANG HÀNG**. Xem chi tiết: [15-uncertainty-escalation.md](15-uncertainty-escalation.md).
+
+```json
+{
+  "type": "UncertaintyEscalation",
+  "escalation_id": "uuid",
+  "source_agent": "A|B",
+  "symbol": "AUDCAD",
+  "pair_state": "FLAT|NORMAL|RECOVERY",
+  "uncertainty_score": 0.75,
+  "category": "CONFLICTING_SIGNALS|MEMORY_CONFLICT|NEAR_RESISTANCE|UNUSUAL_PATTERN|RECOVERY_RISK",
+  "context_summary": "string — tóm tắt tình huống tiếng Việt",
+  "question": "string — câu hỏi cụ thể cho Boss, tiếng Việt",
+  "analysis_so_far": {
+    "proposed_action": "DCA|WAIT|CLOSE_ALL|RECOVERY_DCA|PAYOFF_REDUCE|ENTRY",
+    "confidence": 0.45,
+    "concerns": ["string"]
+  },
+  "snapshot_id": "uuid",
+  "created_at": "ISO-8601",
+  "timeout_at": "ISO-8601"
+}
+```
+
+Categories:
+- `CONFLICTING_SIGNALS`: D1 và H1 nói ngược nhau
+- `MEMORY_CONFLICT`: MemoryPack có bài AVOID liên quan nhưng không chắc áp dụng
+- `NEAR_RESISTANCE`: Gần vùng cản/hỗ trợ D1 mạnh
+- `UNUSUAL_PATTERN`: Pattern bất thường chưa từng gặp
+- `RECOVERY_RISK`: RECOVERY rủi ro cao, lot lớn
+
+## 11. BossAdvisory (Boss → Telegram → Orchestrator → Agent)
+
+```json
+{
+  "type": "BossAdvisory",
+  "escalation_id": "uuid",
+  "boss_response": "string — nguyên văn reply tiếng Việt của Boss (text tự do, chi tiết)",
+  "is_late": false,
+  "responded_at": "ISO-8601"
+}
+```
+
+> Agent nhận `boss_response` như **một prompt bình thường** — inject vào context LLM cùng với snapshot và memory pack. Agent tự xử lý, diễn giải, và đưa ra quyết định dựa trên toàn bộ thông tin.
+
+> `is_late = true` khi Boss reply sau 30 phút timeout. Response vẫn được ghi nhận nhưng Agent đã tự quyết.
+
+## 12. SelfResolutionNotice (Khi timeout — gửi Boss qua Telegram)
+
+```json
+{
+  "type": "SelfResolutionNotice",
+  "escalation_id": "uuid",
+  "symbol": "AUDCAD",
+  "self_resolution": "string — giải pháp Agent đã chọn",
+  "reasoning": "string — lý do tự quyết",
+  "plan_id": "uuid|null",
+  "resolved_at": "ISO-8601"
+}
+```
+
+> Khi Boss reply sau khi đã timeout, Agent gửi thông báo:
+> "Do thời gian đợi quá lâu nên tôi đã tự quyết theo giải pháp [ABC]"

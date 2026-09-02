@@ -11,6 +11,7 @@ A↔B đủ để enqueue; Executor đánh lệnh. Boss không cần có mặt.
 | Ngoại lệ | Mục đích |
 |----------|----------|
 | BossWake / hội đồng | Boss can thiệp khi agents ngủ — **chỉ bàn, không Override v1** |
+| UncertaintyEscalation | Agent A/B chủ động hỏi Boss qua Telegram khi mơ hồ — Boss advisory only, không thay consensus ([chi tiết](15-uncertainty-escalation.md)) |
 | KillSwitch / Flatten | Emergency out-of-band → Boss/operator bật **thủ công** → Executor flatten qua queue |
 | SYSTEM_FREEZE | LLM down → đóng băng toàn bộ + alert Boss — Boss là bộ não dự phòng duy nhất |
 
@@ -25,6 +26,10 @@ A↔B đủ để enqueue; Executor đánh lệnh. Boss không cần có mặt.
 7. Ballot thiếu evidence → không APPROVE.
 8. **Khi LLM down**: SYSTEM_FREEZE — KHÔNG auto-degrade về rule-only; Boss can thiệp thủ công.
 9. **Kill-switch KHÔNG tự kích hoạt** — chỉ Boss/operator bật thủ công.
+10. **Escalation không thay consensus:** BossAdvisory chỉ là input bổ sung; B vẫn phải ballot độc lập; HardPass vẫn bắt buộc.
+11. **Không giới hạn tần suất escalation:** Agent mơ hồ thì hỏi, không cần e ngại.
+12. **Timeout 30 phút:** Hết → Agent tự quyết + thông báo Boss giải pháp đã chọn.
+13. **Boss reply trễ:** Ghi nhận nhưng thông báo Boss rằng Agent đã tự quyết.
 
 ## 4. Phân tầng trách nhiệm
 

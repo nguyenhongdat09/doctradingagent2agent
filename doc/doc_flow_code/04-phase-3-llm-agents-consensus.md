@@ -64,6 +64,33 @@
   - Giới hạn tối đa 12 lượt chat (`MaxBossTurns = 12`).
   - **Ràng buộc bất biến:** Boss chỉ đóng vai trò Cố vấn (Advisory only), **tuyệt đối không có BossOverride**. Lệnh chỉ được enqueue khi Agent B đưa ra `APPROVE` và vượt qua `HardValidator`.
 
+### Module 3.6: Uncertainty Escalation & Telegram Integration (`src/agents/escalation.py` + `src/integrations/telegram/`)
+
+> **Tính năng mới:** Agent A hoặc B chủ động hỏi Boss qua Telegram khi mơ hồ. Xem đặc tả: [15-uncertainty-escalation.md](../doc_agents/15-uncertainty-escalation.md) và [16-telegram-bot-design.md](../doc_agents/16-telegram-bot-design.md).
+
+- **`src/agents/escalation.py` — EscalationManager:**
+  - `create_and_send(agent, symbol, category, question, context, analysis)` → INSERT `EscalationTickets` + gửi Telegram.
+  - `wait_for_response(ticket_id, timeout=1800)` → Đợi Boss reply (poll DB / event), tối đa 30 phút.
+  - `self_resolve(ticket_id, resolution, reasoning)` → UPDATE status=`SELF_RESOLVED` + thông báo Boss.
+  - `handle_late_response(ticket_id, boss_response)` → Ghi `late_boss_response` + nhắn Boss "đã tự quyết theo giải pháp ABC".
+
+- **`src/integrations/telegram/notifier.py` — TelegramNotifier:**
+  - `send_escalation(ticket)` → Format tin nhắn tiếng Việt → `sendMessage` Telegram.
+  - `send_self_resolved(ticket, resolution)` → Thông báo Boss Agent đã tự quyết.
+  - `send_late_notice(ticket, resolution)` → "Do thời gian đợi quá lâu nên tôi đã tự quyết theo giải pháp [ABC]".
+  - `send_result(ticket, plan)` → Thông báo kết quả cuối cùng (optional).
+  - `send_alert(alert_type, message, snapshot)` → System alerts (FREEZE, RECOVERY, v.v.).
+
+- **`src/integrations/telegram/listener.py` — TelegramListener:**
+  - Long polling loop khi có ticket `WAITING` (poll mỗi 3 giây).
+  - Match reply → ticket (quote match ưu tiên > FIFO).
+  - Inject `BossAdvisory` vào agent context như prompt bình thường.
+  - Xử lý late reply (Boss reply sau 30 phút timeout).
+
+- **Tool `escalate_to_boss` cho Agent A & Agent B:**
+  - Agent gọi → `EscalationManager.create_and_send()` → đợi → return `BossAdvisory` hoặc `TimeoutSignal`.
+  - Agent nhận response như prompt bình thường — tự diễn giải và quyết định.
+
 ---
 
 ## ✅ 2. Checklist Developer — Phase 3
@@ -74,6 +101,12 @@
 - [ ] **Agent B Challenger:** Phản biện độc lập, bắt lỗi AVOID, bắt buộc có `counter_evidence` khi APPROVE.
 - [ ] **Consensus Loop:** Dừng đúng sau tối đa 2 vòng khi gặp CHALLENGE; chỉ enqueue khi có APPROVE + HardValidator PASS.
 - [ ] **Boss Channel:** Boss có thể góp ý nhưng không thể ép hệ thống vào lệnh nếu vi phạm nguyên tắc.
+- [ ] **Escalation Tool:** Agent A/B gọi được `escalate_to_boss`, ticket `EscalationTickets` được tạo đúng schema.
+- [ ] **Telegram Send:** Tin nhắn tiếng Việt format đẹp, đầy đủ thông tin cho Boss ra quyết định.
+- [ ] **Reply Match:** Boss reply → match đúng ticket WAITING → inject `BossAdvisory` vào agent context.
+- [ ] **Timeout 30 phút:** Hết giờ → `SELF_RESOLVED` + thông báo Boss giải pháp đã chọn.
+- [ ] **Late Reply:** Boss reply sau timeout → ghi `late_boss_response` + nhắn "đã tự quyết theo giải pháp ABC".
+- [ ] **DB Audit:** Mọi ticket đều có đầy đủ timestamps, trạng thái, và response.
 
 ---
 

@@ -146,3 +146,18 @@ MaxLot == 0 OR MaxLot >= L0
 SnapshotD1Bars >= 20
 LlmContextMinConf ∈ (0, 1]
 ```
+
+## 10. Telegram & Escalation (Uncertainty Escalation → Boss)
+
+> Agent A/B chủ động hỏi Boss qua Telegram khi mơ hồ. Xem: [`../doc_agents/15-uncertainty-escalation.md`](../doc_agents/15-uncertainty-escalation.md).
+
+| ID tham số | Kiểu | Default | Mô tả |
+|------------|------|---------|--------|
+| `InpTelegramBotToken` | string | `env:TELEGRAM_BOT_TOKEN` | Token từ BotFather |
+| `InpTelegramChatId` | string | `env:TELEGRAM_CHAT_ID` | Chat ID của Boss |
+| `InpEscalationTimeoutSec` | int | `1800` | Thời gian đợi Boss reply (30 phút) |
+| `InpUncertaintyThreshold` | double | `0.6` | Score > ngưỡng → cho phép escalate |
+| `InpTelegramPollIntervalSec` | int | `3` | Poll reply mỗi N giây (Long Polling mode) |
+| `InpTelegramLanguage` | string | `vi` | Ngôn ngữ tin nhắn Telegram |
+
+> **Không có** `MaxEscalationsPerDay` hay `MinEscalationInterval` — Agent mơ hồ thì cứ hỏi, không giới hạn tần suất.

@@ -17,7 +17,7 @@ Tài liệu này chi tiết hóa kiến trúc cơ sở dữ liệu SQLite cho t�
 
 ---
 
-## 2. CHI TIẾT SCHEMA 9 BẢNG DỮ LIỆU (Instance Database)
+## 2. CHI TIẾT SCHEMA 10 BẢNG DỮ LIỆU (Instance Database)
 
 ### 2.1. `MarketOrderInfo` (Hàng đợi lệnh chờ thực thi)
 ```sql
@@ -183,6 +183,58 @@ CREATE INDEX idx_llm_runs_lookup ON LLMRuns(symbol, caller, created_at);
 > - `'ballot'`: Lượt thẩm định `ReviewBallot` của Agent B.
 > - `'revision'`: Lượt sửa đổi kế hoạch trong vòng tranh luận Consensus.
 > - `'boss_chat'`: Lượt đàm thoại trong phiên Boss.
+
+### 2.9. `EscalationTickets` (Ticket hỏi Boss khi Agent mơ hồ)
+
+> **Tính năng mới:** Agent A hoặc B chủ động hỏi Boss qua Telegram khi không tự tin về phân tích.
+> Xem chi tiết: [`../doc_agents/15-uncertainty-escalation.md`](../doc_agents/15-uncertainty-escalation.md).
+
+```sql
+CREATE TABLE EscalationTickets (
+    ticket_id           TEXT PRIMARY KEY,                -- UUID
+    symbol              TEXT NOT NULL,                    -- AUDCAD
+    source_agent        TEXT NOT NULL CHECK(source_agent IN ('A', 'B')),
+    pair_state          TEXT NOT NULL,                    -- FLAT|NORMAL|RECOVERY
+    
+    -- Nội dung escalation
+    category            TEXT NOT NULL,                    -- CONFLICTING_SIGNALS|MEMORY_CONFLICT|NEAR_RESISTANCE|UNUSUAL_PATTERN|RECOVERY_RISK
+    uncertainty_score   REAL NOT NULL,                    -- 0.0–1.0
+    context_summary     TEXT NOT NULL,                    -- Tóm tắt tình huống (tiếng Việt)
+    question            TEXT NOT NULL,                    -- Câu hỏi cụ thể cho Boss (tiếng Việt)
+    analysis_so_far     TEXT,                             -- JSON: {proposed_action, confidence, concerns[]}
+    snapshot_id         TEXT,                             -- FK → market_snapshots
+    
+    -- Trạng thái
+    status              TEXT NOT NULL DEFAULT 'WAITING' 
+                        CHECK(status IN ('WAITING', 'RESPONDED', 'SELF_RESOLVED')),
+    
+    -- Timestamps
+    created_at          TEXT NOT NULL,                    -- ISO-8601: lúc gửi
+    timeout_at          TEXT NOT NULL,                    -- ISO-8601: created_at + 30 phút
+    responded_at        TEXT,                             -- ISO-8601: lúc Boss reply (nếu ≤ 30 phút)
+    resolved_at         TEXT,                             -- ISO-8601: lúc Agent tự quyết (khi timeout)
+    
+    -- Response
+    boss_response       TEXT,                             -- Nguyên văn reply Boss (text tự do, tiếng Việt)
+    self_resolution     TEXT,                             -- Giải pháp Agent tự chọn khi timeout
+    late_boss_response  TEXT,                             -- Reply Boss sau khi đã timeout (nếu có)
+    late_response_at    TEXT,                             -- ISO-8601: thời gian Boss reply trễ
+    
+    -- Audit
+    telegram_message_id INTEGER,                          -- ID tin nhắn Telegram đã gửi
+    plan_id             TEXT                              -- FK → Plans (plan được tạo sau escalation)
+);
+
+CREATE INDEX idx_escalation_status ON EscalationTickets(status);
+CREATE INDEX idx_escalation_symbol ON EscalationTickets(symbol, created_at);
+```
+
+**Lifecycle:**
+```
+WAITING → RESPONDED      (Boss reply ≤ 30 phút)
+WAITING → SELF_RESOLVED  (Timeout 30 phút → Agent tự quyết)
+    └→ late_boss_response được ghi nếu Boss reply sau đó
+```
 
 ---
 

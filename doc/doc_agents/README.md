@@ -26,7 +26,9 @@ Bộ đặc tả **kiến trúc Multi-Agent tự chủ (Agent A & B)** cho hệ 
 | [11-boss-interrupt-flow.md](11-boss-interrupt-flow.md) | BossWake → hội đồng 3 bên → vẫn cần A+B + rails |
 | [12-market-data-fetch.md](12-market-data-fetch.md) | Agents tự fetch snapshot; mắt vs não |
 | [13-experience-loop.md](13-experience-loop.md) | get_memory_pack trước plan; feedback sau đóng lệnh |
-| [14-llm-prompt-spec.md](14-llm-prompt-spec.md) | **[NEW]** System prompt A/B, JSON output schemas, token budget, model selection, fallback |
+| [14-llm-prompt-spec.md](14-llm-prompt-spec.md) | System prompt A/B, JSON output schemas, token budget, model selection, fallback |
+| [15-uncertainty-escalation.md](15-uncertainty-escalation.md) | **[NEW]** Agent A/B chủ động hỏi Boss qua Telegram khi mơ hồ — flow, DB, timeout, scenarios |
+| [16-telegram-bot-design.md](16-telegram-bot-design.md) | **[NEW]** Thiết kế Telegram Bot: kiến trúc, message format tiếng Việt, reply matching, security |
 
 ---
 
@@ -42,3 +44,4 @@ Bộ đặc tả **kiến trúc Multi-Agent tự chủ (Agent A & B)** cho hệ 
 | [diagrams/A06-d1-context-pipeline.mmd](diagrams/A06-d1-context-pipeline.mmd) | flowchart TD | Pipeline D1: Fetch → Mắt swing → LLM → Rails |
 | [diagrams/A07-h1-strength-pipeline.mmd](diagrams/A07-h1-strength-pipeline.mmd) | flowchart TD | Pipeline H1: Score 4 thành phần + DQ → LLM → Rails |
 | [diagrams/A08-db-queue-flow.mmd](diagrams/A08-db-queue-flow.mmd) | stateDiagram-v2 | Luồng MarketOrderInfo: PENDING → PROCESSING → ARCHIVED/FAILED |
+| [diagrams/A09-uncertainty-escalation.mmd](diagrams/A09-uncertainty-escalation.mmd) | sequenceDiagram | **[NEW]** Luồng Uncertainty Escalation: Agent → Telegram → Boss → Reply/Timeout |

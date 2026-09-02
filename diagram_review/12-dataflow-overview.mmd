@@ -1,12 +1,13 @@
 %% ============================================================================
 %% SƠ ĐỒ LUỒNG DỮ LIỆU & QUAN HỆ 13 BẢNG SQLITE (DATAFLOW & DB SCHEMA)
-%% Trách nhiệm: 📦 9 Bảng Local (dca_symbol.db) + 🧠 4 Bảng Shared (experience.db)
+%% Trách nhiệm: 📦 10 Bảng Local (dca_symbol.db) + 🧠 4 Bảng Shared (experience.db)
 %% ============================================================================
 
 flowchart LR
     subgraph ExternalServices ["🌐 DỊCH VỤ NGOÀI"]
         MT5["MetaTrader 5 Terminal<br/>(Dữ liệu nến & Khớp lệnh)"]
         LLM_API["LLM Provider (OpenAI / Anthropic / Gemini)<br/>(Trí tuệ nhân tạo)"]
+        TG["Telegram Bot<br/>(Kênh giao tiếp Agent ↔ Boss)"]
     end
 
     subgraph MemoryShared ["🧠 SHARED DB: experience.db (4 Bảng)"]
@@ -17,7 +18,7 @@ flowchart LR
         T_LR["4. llm_runs: Quản lý token & chi phí USD toàn cục"]
     end
 
-    subgraph InstanceLocal ["📦 LOCAL DB: dca_symbol.db (9 Bảng)"]
+    subgraph InstanceLocal ["📦 LOCAL DB: dca_symbol.db (10 Bảng)"]
         direction TB
         T_PS["1. pair_state: Trạng thái (FLAT/NORMAL/RECOVERY)"]
         T_Q["2. MarketOrderInfo: Hàng đợi lệnh PENDING/PROCESSING"]
@@ -28,6 +29,7 @@ flowchart LR
         T_RB["7. review_ballots: Phiếu phản biện của Agent B"]
         T_SF["8. system_flags: Cờ đóng băng SYSTEM_FREEZE"]
         T_AL["9. audit_logs: Nhật ký sự kiện chi tiết"]
+        T_ET["10. escalation_tickets: Ticket hỏi Boss khi mơ hồ"]
     end
 
     subgraph CoreEngine ["⚙️ APPLICATION ENGINE (Python)"]
@@ -64,13 +66,18 @@ flowchart LR
     Evaluator -->|Cập nhật Feedback| T_LF
     Evaluator -->|Cập nhật Profile| T_SP
 
+    %% Luồng Escalation (Agent → Boss via Telegram)
+    Agents -->|"Ghi ticket khi mơ hồ"| T_ET
+    Agents -->|"UncertaintyEscalation"| TG
+    TG -->|"BossAdvisory (reply Boss)"| Agents
+
     %% Styling
     classDef ext fill:#eceff1,stroke:#607d8b,stroke-width:2px,color:#263238;
     classDef shared fill:#e0f2f1,stroke:#00897b,stroke-width:2px,color:#004d40;
     classDef local fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
     classDef core fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
 
-    class MT5,LLM_API ext;
+    class MT5,LLM_API,TG ext;
     class T_SP,T_LS,T_LF,T_LR shared;
-    class T_PS,T_Q,T_OO,T_OA,T_MS,T_TP,T_RB,T_SF,T_AL local;
+    class T_PS,T_Q,T_OO,T_OA,T_MS,T_TP,T_RB,T_SF,T_AL,T_ET local;
     class Eyes,Agents,Validator,Executor,Evaluator core;

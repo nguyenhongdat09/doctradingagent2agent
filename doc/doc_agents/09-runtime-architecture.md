@@ -56,11 +56,12 @@ Trước mỗi cycle:
 | `hard_validate` | Pre-check (safety gate — KHÔNG thay consensus) |
 | `enqueue_order(...)` | INSERT `MarketOrderInfo` PENDING — **chỉ sau consensus** |
 | `set_wake` | Scheduler |
+| `escalate_to_boss` | Gửi câu hỏi cho Boss qua Telegram khi mơ hồ (uncertainty > 0.6). Trả về `BossAdvisory` hoặc timeout signal sau 30 phút |
 
 **Không có** `order_send` trên Agent A/B.  
 **Không có** tool nào cho phép engine tự enqueue.
 
-Agent B: đọc market + memory + validate — không enqueue.
+Agent B: đọc market + memory + validate + **`escalate_to_boss`** khi mơ hồ — không enqueue.
 
 ## 5. Executor
 
