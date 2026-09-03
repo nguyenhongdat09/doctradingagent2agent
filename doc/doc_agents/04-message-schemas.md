@@ -272,7 +272,8 @@ Categories:
 }
 ```
 
-> Agent nhận `boss_response` như **một prompt bình thường** — inject vào context LLM cùng với snapshot và memory pack. Agent tự xử lý, diễn giải, và đưa ra quyết định dựa trên toàn bộ thông tin.
+> Agent nhận `boss_response` như **một prompt chỉ đạo trực tiếp cấp cao** — inject vào context LLM cùng với snapshot và memory pack.
+> **Ràng buộc tối cao:** Nếu Boss từ chối phân tích, bác bỏ đề xuất hoặc yêu cầu WAIT/HỦY/DỪNG, `boss_response` mang tính chất **Mệnh lệnh bắt buộc (Boss Directive)**. Cả Agent A và B bắt buộc phải tuân theo chỉ đạo của Boss, tuyệt đối KHÔNG được tự ý làm trái ý Boss.
 
 > `is_late = true` khi Boss reply sau 30 phút timeout. Response vẫn được ghi nhận nhưng Agent đã tự quyết.
 

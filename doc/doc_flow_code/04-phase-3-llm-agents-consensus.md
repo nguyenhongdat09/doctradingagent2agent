@@ -89,7 +89,7 @@
 
 - **Tool `escalate_to_boss` cho Agent A & Agent B:**
   - Agent gọi → `EscalationManager.create_and_send()` → đợi → return `BossAdvisory` hoặc `TimeoutSignal`.
-  - Agent nhận response như prompt bình thường — tự diễn giải và quyết định.
+  - **Quy tắc Tuân thủ Mệnh lệnh (Boss Directive):** Agent nhận response của Boss như một chỉ thị bắt buộc. Nếu Boss từ chối phân tích, bác bỏ đề xuất hoặc yêu cầu WAIT/HỦY/DỪNG, cả Agent A và B **BẮT BUỘC TUÂN THỦ 100%**, tuyệt đối không được tự cho là Boss sai rồi làm trái ý Boss.
 
 ---
 
@@ -104,6 +104,7 @@
 - [ ] **Escalation Tool:** Agent A/B gọi được `escalate_to_boss`, ticket `EscalationTickets` được tạo đúng schema.
 - [ ] **Telegram Send:** Tin nhắn tiếng Việt format đẹp, đầy đủ thông tin cho Boss ra quyết định.
 - [ ] **Reply Match:** Boss reply → match đúng ticket WAITING → inject `BossAdvisory` vào agent context.
+- [ ] **Tuân lệnh Boss (Boss Directive):** Khi Boss từ chối đề xuất hoặc bảo WAIT/HỦY, Agent A và B lập tức tuân thủ, không được làm trái ý.
 - [ ] **Timeout 30 phút:** Hết giờ → `SELF_RESOLVED` + thông báo Boss giải pháp đã chọn.
 - [ ] **Late Reply:** Boss reply sau timeout → ghi `late_boss_response` + nhắn "đã tự quyết theo giải pháp ABC".
 - [ ] **DB Audit:** Mọi ticket đều có đầy đủ timestamps, trạng thái, và response.
@@ -112,7 +113,7 @@
 
 ## 🧪 3. Kiểm Thử Cần Thực Hiện (Mock Scenarios)
 
-Chạy bộ test `tests/scenarios/test_llm_decisions.py` với **10 kịch bản cốt lõi**:
+Chạy bộ test `tests/scenarios/test_llm_decisions.py` với **11 kịch bản cốt lõi**:
 1. Scenario 1 (FLAT Buy Dip): UPTREND D1 + PUSH_DOWN H1 $0.75 \rightarrow$ `OPEN_BUY` + `APPROVE`.
 2. Scenario 2 (FLAT Wrong Dir): UPTREND D1 + PUSH_UP H1 $0.80 \rightarrow$ `WAIT` + `APPROVE`.
 3. Scenario 3 (FLAT Soft Zone): Score H1 = $0.50 \rightarrow$ `WAIT`.
@@ -123,3 +124,4 @@ Chạy bộ test `tests/scenarios/test_llm_decisions.py` với **10 kịch bản
 8. Scenario 8 (RECOVERY Payoff): Favorable squeeze + Có lệnh lỗ $\rightarrow$ `PAYOFF_REDUCE`.
 9. Scenario 9 (Anti-Sycophancy B): A đề xuất vi phạm bài học AVOID $\rightarrow$ `CHALLENGE`/`VETO`.
 10. Scenario 10 (Boss Advisory): Boss yêu cầu Buy nhưng HardValidator không thỏa $\rightarrow$ Từ chối enqueue.
+11. Scenario 11 (Boss Directive Obedience): Agent A đề xuất DCA nhưng mơ hồ hỏi Boss, Boss trả lời "Từ chối, cấm DCA, WAIT ngay" $\rightarrow$ Agent A và B bắt buộc chuyển sang `WAIT`, cấm tự ý vào lệnh.

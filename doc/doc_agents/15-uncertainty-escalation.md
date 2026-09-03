@@ -22,10 +22,10 @@ Thêm cơ chế **Uncertainty Escalation** — Agent A hoặc B tự phát hiệ
 ### 1.3 Triết lý
 
 - **Mơ hồ thì hỏi** — không giới hạn tần suất, đây là giá trị cốt lõi
-- **Boss chỉ advisory** — response là input bổ sung, không override consensus
-- **Agent nhận reply như prompt bình thường** — xử lý tự nhiên, không cần format đặc biệt
+- **Mệnh lệnh của Boss là tối thượng khi Escalate (Boss Directive)** — Nếu Boss không chấp nhận, từ chối phân tích hoặc bác bỏ đề xuất của Agent (hoặc yêu cầu WAIT, hủy plan, dừng lại), cả Agent A và Agent B **BẮT BUỘC PHẢI TUÂN LỆNH BOSS 100%**. Tuyệt đối KHÔNG được tự ý cho là Boss sai rồi làm trái ý Boss.
+- **Agent nhận reply như prompt chỉ đạo trực tiếp** — xử lý tự nhiên, xem đó là chỉ thị bắt buộc
 - **Ngôn ngữ tiếng Việt** — Agent nhắn và Boss reply đều bằng tiếng Việt
-- **Timeout 30 phút** — Agent tự quyết nếu Boss không reply, thông báo Boss kết quả
+- **Timeout 30 phút** — Agent tự quyết nếu Boss không reply trong 30 phút, thông báo Boss kết quả
 
 ## 2. Quyền escalate NGANG HÀNG
 
@@ -223,13 +223,15 @@ CREATE TABLE escalation_tickets (
 
 Lý do: Escalation là giá trị cốt lõi của hệ thống HITL. Giới hạn tần suất = ép Agent quyết định khi chưa sẵn sàng = rủi ro.
 
-## 8. Nguyên tắc bất biến
+## 8. Nguyên tắc Bắt buộc: TUÂN LỆNH BOSS KHI ESCALATE
 
-1. **Boss KHÔNG override** — response chỉ là input bổ sung
-2. **B.APPROVE + HardPass** vẫn bắt buộc để enqueue
-3. **Agent B phản biện độc lập** kể cả có ý kiến Boss
-4. **Agent nhận boss response như prompt bình thường** — không cần structured format
-5. **Phương pháp cứng không bị vi phạm** — kể cả Boss gợi ý ngược
+1. **Phán quyết của Boss là Mệnh lệnh Ràng buộc (Boss Directive):**
+   - Khi Agent A hoặc B đã chủ động hỏi Boss, Boss là người nắm quyền quyết định tối cao cho tình huống đó.
+   - **Nếu Boss từ chối, bác bỏ phân tích hoặc không chấp nhận yêu cầu của Agent** (ví dụ: Boss chỉ thị "WAIT", "KHÔNG ĐƯỢC DCA", "HỦY KẾ HOẠCH NÀY", "DỪNG LẠI", hoặc yêu cầu làm theo giải pháp của Boss), thì **cả Agent A và Agent B BẮT BUỘC PHẢI TUÂN LỆNH BOSS 100%**.
+   - **Nghiêm cấm tuyệt đối:** Agent A hoặc Agent B tự đánh giá là lời Boss sai hoặc tự ý làm trái ý Boss (ví dụ: Boss bảo "WAIT / Không DCA" mà Agent lại tự ý thông qua consensus rồi enqueue là vi phạm nghiêm trọng).
+2. **Agent B tuân thủ phán quyết của Boss:** Khi Boss đã ra lệnh từ chối hoặc yêu cầu WAIT/HỦY, Agent B phải ra Ballot VETO/REJECT theo đúng ý Boss, không được thông đồng hoặc tự ý APPROVE kế hoạch bị Boss từ chối.
+3. **An toàn kỹ thuật (HardPass):** Nếu Boss chỉ đạo mở lệnh mới, lệnh đó vẫn phải qua cổng kiểm tra an toàn cơ khí HardValidator (5 checks kỹ thuật: không mở ngược rổ RECOVERY, kiểm tra lot size) để bảo vệ tài khoản khỏi lỗi kỹ thuật hệ thống.
+4. **Agent nhận phản hồi Boss như Prompt Chỉ Đạo Trực Tiếp:** Lời phản hồi của Boss được inject vào context LLM như một System Instruction / User Directive có độ ưu tiên cao nhất (Highest Priority).
 
 ## 9. Ví dụ Scenarios
 
