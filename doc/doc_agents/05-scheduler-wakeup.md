@@ -75,10 +75,13 @@ interval = clamp(A_choice, WakeMin, WakeMax)
 next_wake_at = now + interval
 ```
 
-> Tại mỗi lần wake C3:
-> 1. Engine cập nhật `MarketSnapshot` (giá Bid/Ask, `spacing_met`, PnL).
-> 2. Nếu `spacing_met` (giá adverse đủ khoảng cách) → Agent A đánh giá DCA ngay, Agent B phản biện. Nếu consensus → enqueue DCA ngay giữa nến.
-> 3. Không trì hoãn việc DCA sang H1 close nếu điều kiện giá và bối cảnh đã phù hợp.
+> Tại mỗi lần wake C3 (hoặc C0 H1 close):
+> 1. Engine load **Active Contingency Plan** kỳ trước + chỉ cập nhật `DeltaMarketSnapshot` (giá Bid/Ask, nến mới nhất, PnL) — **KHÔNG gửi lại 30 nến lịch sử**.
+> 2. **Pre-check Trigger:** So khớp giá thị trường hiện tại với các kịch bản trong Active Plan:
+>    - Nếu chạm mốc `DOWNSIDE` (DCA) hoặc `UPSIDE` (TP) đã định trước: Kích hoạt quy trình Fast Consensus (A và B xác nhận khớp đúng cam kết) → Enqueue thực thi ngay.
+>    - Nếu chạm `INVALIDATION`: Thực thi đóng rổ lệnh khẩn cấp.
+>    - Nếu rơi vào `STANDBY`: Giữ nguyên lệnh, không gọi LLM suy nghĩ lại từ đầu, hẹn giờ wake tiếp theo.
+> 3. Chỉ khi kịch bản cũ bị phá vỡ hoặc cần tái lập kế hoạch mới, A và B mới tiến hành họp sinh `Unified Contingency Plan` mới.
 
 ## 6. BossWake interrupt
 

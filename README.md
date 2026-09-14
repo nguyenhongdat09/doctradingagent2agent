@@ -2,6 +2,8 @@
 
 Tài liệu đặc tả nghiệp vụ và kiến trúc luồng dành cho **Business Analyst (BA)** và đội ngũ phát triển (Dev / QA) trong dự án **Giao dịch Tự động hóa Agent-to-Agent (A2A)**.
 
+> 📢 **BẢN NÂNG CẤP MỚI NHẤT DÀNH CHO DEV:** Xem tài liệu đặc tả kiến trúc hai tầng chu kỳ và lập kế hoạch đa kịch bản tại [`UPGRADE_CONTINGENCY_PLAN_SPEC.md`](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md) (Tiết kiệm 80% Token, Stateful Contingency Planning, bỏ Agent C, A & B tự điều đình).
+
 ---
 
 ## 🖥️ Công Cụ Trực Quan Hóa Tương Tác ([`index.html`](file:///d:/TradingAgents/PlanToCode/index.html))

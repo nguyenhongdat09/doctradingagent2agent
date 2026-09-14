@@ -3,27 +3,32 @@
 ## 1. Agent A — Planner (không phải Executor sàn)
 
 ### Trách nhiệm
-- Tự fetch D1/H1; nhận structure features + H1 strength score deterministic.
+- Tự fetch D1/H1 khi bắt đầu Macro Cycle; ở Micro Cycle sau chỉ nạp Active Plan + Delta Data.
 - `get_memory_pack` trước khi lập plan; đưa pack vào lập luận.
-- Soạn `TradePlan` / `DcaReview`; tranh luận với B (≤2 vòng/cycle).
+- Soạn `TradePlan` kèm `ContingencyPlan` đa kịch bản (UPSIDE / DOWNSIDE / INVALIDATION / STANDBY).
+- Tiếp nhận `CounterPlan` từ Agent B để hòa giải (Reconcile) thành Unified Plan (≤2 vòng/cycle).
 - Trong `BOSS`: tiếp nhận ý Boss; **không** được execute khi B dissent.
 - Sau consensus + HardPass → **`enqueue_order(...)`** = INSERT `MarketOrderInfo` status=`PENDING`.
-- Set wake C1–C3; sau đóng lệnh gọi `submit_feedback` / `record_lesson` (qua tool / LessonWriter).
+- Lưu `Unified Contingency Plan` vào DB để làm kim chỉ nam cho Micro Cycle kế tiếp.
+- Set wake C1–C3; sau khi đóng sạch rổ lệnh (kết thúc Macro Cycle) gọi `submit_feedback` / `record_lesson`.
 
 ### Không được
 - Gọi `OrderSend` / đóng lệnh MT5 trực tiếp.
 - Enqueue khi thiếu B.APPROVE (AUTO và BOSS).
 - Bỏ HardValidator / invent swing.
+- Kết thúc chu kỳ mà không sinh Unified Contingency Plan 2 đầu (Tăng / Giảm).
 
 ## 2. Agent B — Independent Challenger
 
 ### Trách nhiệm
-- Độc lập đọc snapshot + MemoryPack; bắt lỗi A vi phạm bài học AVOID.
+- Độc lập đọc snapshot/delta + MemoryPack; bắt lỗi A vi phạm bài học AVOID.
 - `ReviewBallot` đủ field; CHALLENGE khi cần.
+- **Bắt buộc cung cấp `CounterPlan` cụ thể khi không đồng thuận:** Chỉ rõ đang chờ điều kiện gì (mốc giá, nến xác nhận), nếu thị trường TĂNG thì làm gì, nếu GIẢM thì làm gì.
 - Trong BOSS: phản biện cả Boss nếu trái data/rails.
 
 ### Không được
 - APPROVE không `counter_evidence`; ba phải; enqueue/OrderSend.
+- **Từ chối khống (Passive Dissent):** Cấm chỉ REJECT/CHALLENGE chung chung mà không đưa ra Counter-Plan định lượng mốc giá/điều kiện chờ.
 
 ## 3. Boss — Human (v1)
 

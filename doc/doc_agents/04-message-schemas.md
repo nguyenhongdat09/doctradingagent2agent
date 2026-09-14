@@ -68,6 +68,31 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
 }
 ```
 
+## 0b. DeltaMarketSnapshot (nạp cho các Micro Cycle tiếp nối — tiết kiệm Token)
+
+```json
+{
+  "macro_cycle_id": "MC_AUDCAD_001",
+  "micro_cycle_id": 2,
+  "symbol": "AUDCAD",
+  "active_plan_id": "uuid_plan_truoc",
+  "current_bid": 0.8952,
+  "current_ask": 0.8954,
+  "elapsed_minutes": 30,
+  "latest_bar": {"t": 1718000000, "o": 0.8945, "h": 0.8955, "l": 0.8942, "c": 0.8953, "v": 450},
+  "trigger_check": {
+    "hit_scenario": "NONE|UPSIDE|DOWNSIDE|INVALIDATION",
+    "matched_condition": "string"
+  },
+  "basket": {
+    "total_lot": 0.05,
+    "orders": 1,
+    "profit": 4.5,
+    "state": "NORMAL"
+  }
+}
+```
+
 ## 2. MarketAssessment (Agent B — độc lập)
 
 ```json
@@ -94,7 +119,53 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "agree_points": ["..."],
   "dissent_points": ["..."],
   "requested_changes": ["..."],
-  "round": 1
+  "round": 1,
+  "counter_plan": {
+    "waiting_for": "string — BẮT BUỘC nếu decision != APPROVE (chờ nến H1 đóng, chờ giá hồi về đâu...)",
+    "scenarios_override": {
+      "UPSIDE": {"price_level": 0.0, "action": "ENTRY|DCA|TP|WAIT", "rationale": "string"},
+      "DOWNSIDE": {"price_level": 0.0, "action": "ENTRY|DCA|TP|WAIT", "rationale": "string"}
+    }
+  }
+}
+```
+
+## 3b. UnifiedContingencyPlan (Kế hoạch hành động thống nhất 2 đầu lưu vào DB)
+
+```json
+{
+  "plan_id": "uuid",
+  "macro_cycle_id": "string",
+  "micro_cycle_id": 1,
+  "created_at": "ISO-8601",
+  "symbol": "AUDCAD",
+  "base_price": 0.8950,
+  "scenarios": {
+    "UPSIDE": {
+      "trigger_condition": "Giá >= 0.8980 kèm nến H1 đóng xanh",
+      "action": "TAKE_PROFIT_PARTIAL",
+      "params": {"close_ratio": 0.5, "move_sl_to": 0.8950},
+      "rationale": "Chạm kháng cự trên, khóa 50% lợi nhuận"
+    },
+    "DOWNSIDE": {
+      "trigger_condition": "Giá <= 0.8920",
+      "action": "DCA",
+      "params": {"lot": 0.1, "max_total_lot": 0.25},
+      "rationale": "Test hỗ trợ EMA, nhồi thêm lệnh 2"
+    },
+    "INVALIDATION": {
+      "trigger_condition": "Giá thủng 0.8880",
+      "action": "CLOSE_ALL",
+      "params": {},
+      "rationale": "Gãy cấu trúc, cắt lỗ toàn bộ"
+    },
+    "STANDBY": {
+      "trigger_condition": "Giá trong vùng 0.8921 - 0.8979",
+      "action": "WAIT",
+      "params": {"next_wake_type": "H1_CLOSE"},
+      "rationale": "Chưa chạm mốc hành động, giữ nguyên lệnh"
+    }
+  }
 }
 ```
 

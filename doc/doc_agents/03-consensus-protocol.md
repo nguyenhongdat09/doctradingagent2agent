@@ -14,7 +14,7 @@ HardValidator (5 checks) — xem phuong_phap overview:
 4. NormalizeLot  
 5. Kill-switch off  
 
-## 2. Mode AUTO
+## 2. Mode AUTO & Giao thức Đồng Thuận Kế Hoạch (Contingency Consensus)
 
 ```
 CONSENSUS_AUTO ⇔
@@ -25,9 +25,20 @@ CONSENSUS_AUTO ⇔
 
 → A.enqueue_order(MarketOrderInfo PENDING)
 → Executor thực thi
+→ A & B sinh Unified Contingency Plan cho chu kỳ tới
 ```
 
-Debate C4: ≤2 vòng CHALLENGE trong cycle; hết → DEFER C1/C2/C3.
+### Quy tắc Bắt Buộc Khi B Không Đồng Thuận (Dissent Protocol):
+1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {REJECT, CHALLENGE}`, ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:
+   - `waiting_for`: Chỉ rõ đang chờ đợi điều kiện gì (nến H1 đóng rút chân, phá vỡ kháng cự/hỗ trợ, biên độ pip...).
+   - `scenarios_override`: Kịch bản chi tiết 2 đầu (nếu giá TĂNG đến X thì làm gì, nếu giá GIẢM về Y thì làm gì).
+2. **Vòng Hòa Giải (Reconciliation Loop - ≤2 vòng/cycle):**
+   - Vòng 1: A đề xuất `TradePlan` + `ContingencyPlan`. B phản hồi `ballot` kèm `counter_plan`.
+   - Vòng 2: A tiếp thu `counter_plan` của B, điều chỉnh lại các mốc giá và điều kiện kích hoạt thành `Reconciled Plan`.
+   - B ký duyệt `APPROVE` trên `Reconciled Plan` → Lưu thành `UNIFIED CONTINGENCY PLAN` vào DB/Cache.
+3. **Nếu sau 2 vòng vẫn xung đột:**
+   - Hệ thống tự động chuyển sang kịch bản an toàn nhất: `action = WAIT` (STANDBY), hẹn giờ wake nến kế tiếp.
+   - Luôn luôn phải có 1 `UNIFIED PLAN` (tối thiểu là kịch bản STANDBY/Cắt lỗ bảo vệ) được lưu vào DB.
 
 ## 3. Mode BOSS (v1 — không Override)
 

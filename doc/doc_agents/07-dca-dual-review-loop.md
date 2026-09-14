@@ -23,21 +23,22 @@ Agent A **QUYẾT ĐỊNH NGAY TRONG CYCLE WAKE** có DCA hay WAIT dựa trên t
 
 → Đây là **giá trị cốt lõi** của hệ thống: agents suy nghĩ trước khi lấp rổ, và lấp kịp thời giữa nến khi điều kiện đạt.
 
-## 2. Cycle khi có lệnh
+## 2. Cycle khi có lệnh (Contingency Plan Driven)
 
 ```
-Wake (C3 hoặc BossWake)
-  get_memory_pack → inject vào A+B
-  Engine build MarketSnapshot:
-    - spacing_met? (flag)
-    - basket status (TotalLot, profit, adverse_distance)
-    - D1 structure, H1 strength score, DQ flags
-  A phân tích snapshot → proposed_action (DCA/WAIT/CLOSE_ALL/PAYOFF_REDUCE)
-  HardValidator → B ballot → consensus
-  → Nếu consensus: A.enqueue_order(...)
-  → Executor MT5
-  → Refresh: nếu TotalLot==0 → FLAT → wake C0/C1/C2
-  → Trên CLOSE_ALL / exit RECOVERY: submit_feedback / record_lesson
+Wake (C3 hoặc BossWake):
+  Load Active Contingency Plan từ Micro Cycle trước + DeltaMarketSnapshot
+  Kiểm tra Pre-Trigger:
+    - Nếu giá chạm mốc DOWNSIDE (DCA) đã cam kết trước đó:
+        A & B Fast Review (Xác nhận đúng cam kết kịch bản) → HardPass → A.enqueue_order(...)
+    - Nếu giá chưa chạm hoặc thị trường biến động bất thường cần điều chỉnh:
+        A soạn Draft Plan mới (kèm kịch bản DCA / TP 2 đầu)
+        B review: nếu từ chối B BẮT BUỘC gửi Counter-Plan (nêu rõ điều kiện chờ và kịch bản thay thế)
+        A & B Reconcile (≤2 vòng) → Chốt Unified Contingency Plan mới lưu DB
+  Executor MT5 thực thi (nếu có lệnh)
+  Refresh:
+    - Nếu TotalLot == 0 (toàn bộ lệnh đã đóng) → ĐÓNG MACRO CYCLE → submit_feedback / record_lesson → PairState = FLAT
+    - Nếu còn lệnh → Tiếp tục Micro Cycle trong Macro Cycle hiện tại
 ```
 
 ## 3. Soft zone H1
