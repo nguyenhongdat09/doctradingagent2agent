@@ -139,28 +139,52 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "micro_cycle_id": 1,
   "created_at": "ISO-8601",
   "symbol": "AUDCAD",
+  "plan_state": "PROVISIONAL|COMMITTED",
   "base_price": 0.8950,
+  "context_trend": "UPTREND_PULLBACK|DOWNTREND_PULLBACK|SIDEWAY_BOUNDARY",
   "scenarios": {
     "UPSIDE": {
-      "trigger_condition": "Giá >= 0.8980 kèm nến H1 đóng xanh",
-      "action": "TAKE_PROFIT_PARTIAL",
+      "zone": "0.8980 - 0.9000",
+      "approach_momentum": "WEAKENING|STRONG|EXHAUSTION",
+      "trigger_condition": {
+        "price_level": 0.8980,
+        "candle_reaction": [
+          "Nến H1 rút râu trên >= 40% thân nến",
+          "HOẶC xuất hiện cụm nến đảo chiều đỏ (Bearish Engulfing)"
+        ]
+      },
+      "action": "TAKE_PROFIT_PARTIAL|OPEN_SELL",
       "params": {"close_ratio": 0.5, "move_sl_to": 0.8950},
-      "rationale": "Chạm kháng cự trên, khóa 50% lợi nhuận"
+      "rationale": "Chạm kháng cự trên kèm nến hãm lực"
     },
     "DOWNSIDE": {
-      "trigger_condition": "Giá <= 0.8920",
-      "action": "DCA",
+      "zone": "0.8915 - 0.8925",
+      "approach_momentum": "EXHAUSTION",
+      "trigger_condition": {
+        "price_level": 0.8920,
+        "candle_reaction": [
+          "Nến đỏ chạm hỗ trợ rút chân râu dưới dài",
+          "Nến tiếp theo đóng xanh xác nhận đảo chiều"
+        ]
+      },
+      "action": "DCA|OPEN_BUY",
       "params": {"lot": 0.1, "max_total_lot": 0.25},
-      "rationale": "Test hỗ trợ EMA, nhồi thêm lệnh 2"
+      "rationale": "Test hỗ trợ EMA trong xu hướng tăng, lực xả cạn kiệt"
     },
     "INVALIDATION": {
-      "trigger_condition": "Giá thủng 0.8880",
+      "trigger_condition": {
+        "price_level": 0.8880,
+        "candle_reaction": ["Nến H1 đóng cửa thủng hỗ trợ thân đặc"]
+      },
       "action": "CLOSE_ALL",
       "params": {},
-      "rationale": "Gãy cấu trúc, cắt lỗ toàn bộ"
+      "rationale": "Gãy cấu trúc sóng, cắt lỗ toàn bộ"
     },
     "STANDBY": {
-      "trigger_condition": "Giá trong vùng 0.8921 - 0.8979",
+      "trigger_condition": {
+        "price_range": [0.8921, 0.8979],
+        "description": "Giá trong vùng sideway chưa có nến hãm lực xác nhận"
+      },
       "action": "WAIT",
       "params": {"next_wake_type": "H1_CLOSE"},
       "rationale": "Chưa chạm mốc hành động, giữ nguyên lệnh"

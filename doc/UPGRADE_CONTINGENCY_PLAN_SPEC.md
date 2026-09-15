@@ -65,7 +65,18 @@ Khởi động khi: FLAT (0 lệnh) -> Kết thúc khi: Lệnh clear sạch (FLA
 
 ---
 
-## 3. Quy Trình Đồng Thuận A - B & Cơ Chế Phản Biện (Không Cần Agent C)
+## 3. Quy Trình Đồng Thuận A - B & Vòng Đời Plan Tạm vs Plan Chốt
+
+### 3.0. Phân Định Vòng Đời: Plan Tạm (Provisional) vs Plan Chốt (Committed)
+- **Plan Tạm (`PROVISIONAL`):**
+  - Được tạo ra bởi Agent A khi khởi thảo, hoặc sau khi A và B thống nhất nhưng chuẩn bị đưa cho Agent thứ ba (nếu sau này mở rộng thêm Agent C).
+  - Trạng thái: Lưu trong Memory/Cache phiên thương lượng, **tuyệt đối không dùng để kích hoạt lệnh**.
+- **Plan Chốt (`COMMITTED`):**
+  - Chỉ được xác lập khi **100% Agent liên quan đồng thuận (`APPROVE`)**.
+  - Được ghi xuống Database với cờ `is_active = TRUE`.
+  - **Ở chu kỳ tiếp theo:** Hệ thống **CHỈ gửi duy nhất Plan Chốt** cho các Agent. Các Agent **bị khóa quyền phân tích lại biểu đồ (No re-analysis)**, chỉ làm nhiệm vụ giám sát (Observer): Kiểm tra xem giá và nến có khớp đúng kịch bản của Plan Chốt hay không.
+
+### 3.1. Cơ Chế Phản Biện & Hòa Giải (Không Cần Agent C)
 
 Thay vì bổ sung thêm Agent C (Thư ký làm tăng độ trễ và chi phí token), hệ thống sử dụng quy trình **Propose -> Challenge with Counter-Plan -> Reconcile**:
 
@@ -79,39 +90,48 @@ sequenceDiagram
     participant Exec as Executor (MT5/Broker)
 
     Sched->>Engine: Đánh thức Micro Cycle mới
-    Engine->>Engine: Lấy Active Plan gần nhất + Giá hiện tại (Delta)
+    Engine->>Engine: Lấy duy nhất PLAN CHỐT (COMMITTED) gần nhất + Giá/Nến hiện tại (Delta)
 
-    alt 1. GIÁ KHỚP VỚI TRIGGER TRONG PLAN CŨ
-        Note over Engine: Không cần gọi LLM phân tích sâu!
-        Engine->>A: Thông báo: Giá đã chạm Trigger (Ví dụ: DCA vùng 2298)
-        A->>B: Đề xuất thực thi theo kịch bản đã thống nhất
-        B-->>A: APPROVE (Xác nhận đúng cam kết Plan)
+    alt 1. GIÁ & NẾN KHỚP VỚI TRIGGER TRONG PLAN CHỐT
+        Note over Engine: Không phân tích lại biểu đồ!
+        Engine->>A: Báo cáo: Nến mới thỏa mãn điều kiện Price Action trong Plan Chốt
+        A->>B: Đề xuất thực thi theo đúng Plan Chốt
+        B-->>A: APPROVE (Xác nhận khớp đúng cam kết)
         A->>Exec: Đẩy lệnh vào Queue thực thi
         Engine->>Engine: Cập nhật trạng thái vị thế & chuyển sang tạo Plan mới
 
-    else 2. GIÁ CHƯA CHẠM TRIGGER HOẶC BIẾN ĐỘNG CẦN UPDATE PLAN
-        Engine->>A: Gửi Delta Data + Active Plan cũ
-        A->>A: Phân tích & Đưa ra Draft Plan mới (Đủ 2 đầu Tăng/Giảm)
-        A->>B: Gửi Draft Plan
+    else 2. GIÁ CHƯA KHỚP HOẶC BIẾN ĐỘNG PHÁ VỠ (PLAN PRUNING)
+        Engine->>A: Gửi Delta Data + Plan Chốt cũ
+        A->>A: Soạn DỰ THẢO PLAN TẠM mới (Cắt tỉa nhánh thừa, tinh chỉnh nến phản ứng)
+        A->>B: Gửi PLAN TẠM (PROVISIONAL)
         
         alt B đồng thuận
             B-->>A: APPROVE
-            A->>Engine: Commit UNIFIED PLAN vào DB
+            A->>Engine: Chuyển thành PLAN CHỐT (COMMITTED) & Lưu vào DB
         else B không đồng thuận (B Dissent)
-            Note over B: B BẮT BUỘC phải đưa ra Counter-Plan<br/>(Chờ gì? Nến nào? Mức giá nào? Tăng sao, giảm sao?)
+            Note over B: B BẮT BUỘC phải đưa ra Counter-Plan<br/>(Chờ gì? Lực nến nào? Nến rút râu/đổi màu nào? Mức giá nào?)
             B-->>A: REJECT kèm COUNTER-PLAN
-            A->>A: Reconcile: Dung hòa mốc giá/điều kiện của B vào Plan
-            A->>B: Gửi RECONCILED PLAN (Vòng 2)
-            B-->>A: APPROVE & Ký duyệt
-            A->>Engine: Commit UNIFIED PLAN vào DB
+            A->>A: Reconcile: Dung hòa mốc giá/điều kiện nến của B vào Plan
+            A->>B: Gửi PLAN TẠM ĐÃ HÒA GIẢI (Vòng 2)
+            B-->>A: APPROVE & Ký duyệt 100%
+            A->>Engine: Chuyển thành PLAN CHỐT (COMMITTED) & Lưu vào DB
         end
     end
 ```
 
-### Quy tắc bất di bất dịch cho Agent B:
+### 3.2. Thuật Toán Cắt Tỉa Kịch Bản (Plan Pruning & Dynamic Focusing)
+Khi thị trường tăng vọt hoặc xả mạnh một chiều không có dấu hiệu hãm đà:
+1. **Prune (Cắt tỉa):** Tự động xóa bỏ hoàn toàn các nhánh kịch bản đối lập đã lỗi thời (ví dụ: thị trường tăng mạnh phá đỉnh thì xóa nhánh chờ mua ở đáy dưới).
+2. **Refine & Focus (Tinh chỉnh & Tập trung):** Giữ lại nhánh đang xảy ra nhưng thắt chặt điều kiện:
+   - Dời vùng cản lên cao hơn.
+   - Bổ sung yêu cầu: *"Chờ nến H1 rút râu trên hoặc xuất hiện 2 nến đỏ liên tiếp xác nhận hãm lực hoàn toàn mới được Bán"*.
+3. **Lợi ích:** Kích thước Plan gửi cho LLM ở chu kỳ sau siêu ngắn, loại bỏ nhiễu, tập trung 100% năng lực suy luận.
+
+### 3.3. Quy tắc bất di bất dịch cho Agent B:
 1. **Cấm "Reject khống":** Agent B không được phép trả lời cụt lủn `decision: REJECT` mà không có `counter_plan`.
 2. **Nội dung Counter-Plan của B:** Phải chỉ rõ:
    - *Đang chờ điều kiện gì?* (Ví dụ: chờ nến H1 đóng rút chân, chờ RSI thoát quá bán, chờ test lại đáy).
+   - *Lực nến và phản ứng nến:* Yêu cầu cụ thể về mẫu hình nến xác nhận trước khi vào lệnh.
    - *Nếu thị trường tăng lên mức X:* Dự tính sẽ làm gì?
    - *Nếu thị trường giảm về mức Y:* Dự tính sẽ làm gì?
 
@@ -119,9 +139,9 @@ sequenceDiagram
 
 ## 4. Đặc Tả Message Schemas (JSON Data Contracts)
 
-### 4.1. Unified Contingency Plan (Plan chung được lưu vào DB)
+### 4.1. Unified Contingency Plan (Plan Tạm / Plan Chốt)
 
-Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này để nạp cho chu kỳ sau:
+Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ ghi DB khi `plan_state = "COMMITTED"`):
 
 ```json
 {
@@ -129,44 +149,56 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này để 
   "micro_cycle_id": 3,
   "created_at": "2026-09-14T08:00:00Z",
   "symbol": "XAUUSD",
+  "plan_state": "COMMITTED",
   "current_pair_state": "NORMAL",
   "base_price": 2305.50,
   "consensus_round": 2,
+  "context_trend": "UPTREND_PULLBACK",
   "scenarios": {
     "UPSIDE": {
+      "zone": "2315.00 - 2318.00 (Kháng cự ngắn hạn)",
+      "approach_momentum": "WEAKENING (Lực nến tăng yếu dần, thân nến nhỏ)",
       "trigger_condition": {
         "price_operator": ">=",
         "price_level": 2315.00,
-        "bar_confirmation": "H1_CLOSE_BULLISH",
-        "description": "Giá vượt đỉnh ngắn hạn 2315 kèm nến H1 đóng xanh"
+        "candle_reaction": [
+          "Nến H1 xanh rút râu trên dài >= 40% thân (Pinbar/Rejection)",
+          "HOẶC xuất hiện cụm nến đảo chiều Bearish Engulfing đóng đỏ"
+        ],
+        "description": "Giá tiến vào cản nhưng hãm đà tăng và xuất hiện nến từ chối giá"
       },
       "action": "TAKE_PROFIT_PARTIAL",
       "params": {
         "close_ratio": 0.5,
         "move_sl_to": 2305.50
       },
-      "rationale": "Chạm kháng cự H4, chốt 50% khối lượng và dời SL về Entry để bảo toàn vốn"
+      "rationale": "Chạm kháng cự H4 có nến hãm lực, chốt 50% khối lượng và dời SL về Entry"
     },
     "DOWNSIDE": {
+      "zone": "2298.00 - 2300.00 (Hỗ trợ EMA200)",
+      "approach_momentum": "EXHAUSTION (Cạn kiệt lực bán sau cú ép mạnh)",
       "trigger_condition": {
         "price_operator": "<=",
         "price_level": 2298.00,
-        "bar_confirmation": "TOUCH",
-        "description": "Giá hồi về vùng hỗ trợ EMA200 2298 - 2300"
+        "candle_reaction": [
+          "Nến đỏ chạm vùng rút chân tạo râu dưới dài",
+          "Nến tiếp theo đóng xanh xác nhận đảo chiều"
+        ],
+        "description": "Giá hồi về vùng hỗ trợ trong xu hướng tăng D1, lực bán hãm lại"
       },
       "action": "DCA",
       "params": {
         "lot": 0.15,
         "max_total_lot": 0.35
       },
-      "rationale": "Vẫn giữ cấu trúc tăng D1, nhịp giảm là cơ hội gom hàng vị thế số 2"
+      "rationale": "Xu hướng D1 vẫn TĂNG mạnh, nhịp giảm là cơ hội gom hàng vị thế số 2 (Buy the dip)"
     },
     "INVALIDATION": {
       "trigger_condition": {
         "price_operator": "<=",
         "price_level": 2290.00,
-        "bar_confirmation": "H1_CLOSE",
-        "description": "Nến H1 đóng thủng mốc 2290.00"
+        "candle_reaction": ["Nến H1 đóng cửa dứt khoát dưới 2290.00 thân nến đặc"],
+        "description": "Nến H1 đóng thủng hoàn toàn mốc hỗ trợ cứng 2290.00"
       },
       "action": "CLOSE_ALL",
       "params": {},
@@ -175,14 +207,14 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này để 
     "STANDBY": {
       "trigger_condition": {
         "price_range": [2298.01, 2314.99],
-        "description": "Giá dao động trong biên độ cho phép, chưa chạm điều kiện hành động"
+        "description": "Giá dao động trong biên độ cho phép, chưa có nến xác nhận"
       },
       "action": "WAIT",
       "params": {
         "next_wake_type": "H1_CLOSE",
         "fallback_timer_minutes": 30
       },
-      "rationale": "Thị trường chưa có tín hiệu mới, kiên nhẫn nắm giữ vị thế"
+      "rationale": "Thị trường chưa có nến hãm lực hoặc nến đảo chiều, kiên nhẫn nắm giữ vị thế"
     }
   }
 }
@@ -293,15 +325,16 @@ CREATE TABLE contingency_plans (
     macro_cycle_id VARCHAR(64) NOT NULL,
     micro_cycle_id INT NOT NULL,
     created_at TIMESTAMP NOT NULL,
+    plan_state VARCHAR(16) NOT NULL DEFAULT 'COMMITTED', -- COMMITTED (chính thức), PROVISIONAL (tạm thời)
     base_price DECIMAL(12, 5) NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,             -- Chỉ 1 plan là ACTIVE cho mỗi macro_cycle
+    is_active BOOLEAN DEFAULT TRUE,             -- Chỉ 1 plan là ACTIVE cho mỗi macro_cycle (chỉ áp dụng khi COMMITTED)
     agent_a_draft_json TEXT NOT NULL,           -- Đề xuất gốc của Agent A
     agent_b_counter_json TEXT NULL,             -- Phản biện & Counter-plan của B (nếu có)
-    unified_plan_json TEXT NOT NULL,            -- Kế hoạch thống nhất cuối cùng (Scenarios đầy đủ)
+    unified_plan_json TEXT NOT NULL,            -- Kế hoạch thống nhất cuối cùng (Scenarios đầy đủ Price Action)
     FOREIGN KEY (macro_cycle_id, micro_cycle_id) REFERENCES micro_cycles(macro_cycle_id, micro_cycle_id)
 );
 
-CREATE INDEX idx_active_plan ON contingency_plans(macro_cycle_id, is_active);
+CREATE INDEX idx_active_plan ON contingency_plans(macro_cycle_id, is_active, plan_state);
 ```
 
 ---

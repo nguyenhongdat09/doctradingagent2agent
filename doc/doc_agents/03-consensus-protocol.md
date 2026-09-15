@@ -25,20 +25,25 @@ CONSENSUS_AUTO ⇔
 
 → A.enqueue_order(MarketOrderInfo PENDING)
 → Executor thực thi
-→ A & B sinh Unified Contingency Plan cho chu kỳ tới
+→ A & B sinh PLAN CHỐT (COMMITTED) cho chu kỳ tới
 ```
+
+### Quy tắc Vòng Đời: Plan Tạm (Provisional) vs Plan Chốt (Committed)
+1. **Plan Tạm (`PROVISIONAL`):** Mọi bản thảo do A khởi tạo hoặc trong các vòng tranh luận đều là Plan Tạm. Plan Tạm chỉ nằm trong bộ nhớ đệm trao đổi giữa các Agent, **tuyệt đối không được kích hoạt lệnh hay lưu đè `is_active = TRUE` vào DB**.
+2. **Plan Chốt (`COMMITTED`):** Chỉ khi **100% Agent tham gia đồng thuận (`APPROVE`)**, Plan Tạm mới được phong cấp thành **Plan Chốt (`COMMITTED`)** và lưu vào DB với `is_active = TRUE`.
+3. **Quy tắc Khóa Phân Tích (Lockdown Rule):** Ở chu kỳ sau thức dậy, nếu đã có Plan Chốt, **CẤM các Agent phân tích lại biểu đồ từ đầu (No re-analysis)**. Các Agent chỉ đóng vai trò giám sát: đối chiếu nến mới với kịch bản Price Action trong Plan Chốt.
 
 ### Quy tắc Bắt Buộc Khi B Không Đồng Thuận (Dissent Protocol):
 1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {REJECT, CHALLENGE}`, ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:
-   - `waiting_for`: Chỉ rõ đang chờ đợi điều kiện gì (nến H1 đóng rút chân, phá vỡ kháng cự/hỗ trợ, biên độ pip...).
-   - `scenarios_override`: Kịch bản chi tiết 2 đầu (nếu giá TĂNG đến X thì làm gì, nếu giá GIẢM về Y thì làm gì).
+   - `waiting_for`: Chỉ rõ đang chờ đợi điều kiện gì (chờ nến rút râu, chờ cụm nến đỏ/xanh đảo chiều, hãm lực...).
+   - `scenarios_override`: Kịch bản chi tiết 2 đầu kèm yêu cầu Price Action nến cụ thể.
 2. **Vòng Hòa Giải (Reconciliation Loop - ≤2 vòng/cycle):**
-   - Vòng 1: A đề xuất `TradePlan` + `ContingencyPlan`. B phản hồi `ballot` kèm `counter_plan`.
-   - Vòng 2: A tiếp thu `counter_plan` của B, điều chỉnh lại các mốc giá và điều kiện kích hoạt thành `Reconciled Plan`.
-   - B ký duyệt `APPROVE` trên `Reconciled Plan` → Lưu thành `UNIFIED CONTINGENCY PLAN` vào DB/Cache.
+   - Vòng 1: A đề xuất `TradePlan` + `ContingencyPlan` (`PROVISIONAL`). B phản hồi `ballot` kèm `counter_plan`.
+   - Vòng 2: A tiếp thu `counter_plan` của B, điều chỉnh lại các mốc giá và điều kiện nến thành `Reconciled Plan` (`PROVISIONAL`).
+   - B ký duyệt `APPROVE` trên `Reconciled Plan` → Chuyển trạng thái sang `COMMITTED` (Plan Chốt) và lưu vào DB.
 3. **Nếu sau 2 vòng vẫn xung đột:**
    - Hệ thống tự động chuyển sang kịch bản an toàn nhất: `action = WAIT` (STANDBY), hẹn giờ wake nến kế tiếp.
-   - Luôn luôn phải có 1 `UNIFIED PLAN` (tối thiểu là kịch bản STANDBY/Cắt lỗ bảo vệ) được lưu vào DB.
+   - Luôn luôn phải có 1 `COMMITTED PLAN` (tối thiểu là kịch bản STANDBY/Cắt lỗ bảo vệ) được lưu vào DB.
 
 ## 3. Mode BOSS (v1 — không Override)
 

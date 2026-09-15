@@ -23,18 +23,20 @@ Agent A **QUYẾT ĐỊNH NGAY TRONG CYCLE WAKE** có DCA hay WAIT dựa trên t
 
 → Đây là **giá trị cốt lõi** của hệ thống: agents suy nghĩ trước khi lấp rổ, và lấp kịp thời giữa nến khi điều kiện đạt.
 
-## 2. Cycle khi có lệnh (Contingency Plan Driven)
+## 2. Cycle khi có lệnh (Price Action & Plan Chốt Driven)
 
 ```
 Wake (C3 hoặc BossWake):
-  Load Active Contingency Plan từ Micro Cycle trước + DeltaMarketSnapshot
+  Load PLAN CHỐT (COMMITTED) từ Micro Cycle trước + DeltaMarketSnapshot
   Kiểm tra Pre-Trigger:
-    - Nếu giá chạm mốc DOWNSIDE (DCA) đã cam kết trước đó:
-        A & B Fast Review (Xác nhận đúng cam kết kịch bản) → HardPass → A.enqueue_order(...)
-    - Nếu giá chưa chạm hoặc thị trường biến động bất thường cần điều chỉnh:
-        A soạn Draft Plan mới (kèm kịch bản DCA / TP 2 đầu)
-        B review: nếu từ chối B BẮT BUỘC gửi Counter-Plan (nêu rõ điều kiện chờ và kịch bản thay thế)
-        A & B Reconcile (≤2 vòng) → Chốt Unified Contingency Plan mới lưu DB
+    - Nếu giá chạm mốc DOWNSIDE (DCA) VÀ xuất hiện nến hãm lực / rút chân đúng kịch bản Plan Chốt:
+        A & B Fast Review (Xác nhận đúng cam kết nến) → HardPass → A.enqueue_order(...)
+    - Nếu giá chạm mốc nhưng nến xả quá mạnh (chưa hãm đà):
+        Tạm hoãn vào lệnh, thực thi Plan Pruning (tập trung dời vùng hỗ trợ tiếp theo và chờ nến xác nhận)
+    - Nếu thị trường biến động bất thường cần đổi kế hoạch:
+        A soạn PLAN TẠM (PROVISIONAL) mới
+        B review (nếu dissent bắt buộc có Counter-Plan nến cụ thể)
+        A & B Reconcile (≤2 vòng) → Phong cấp thành PLAN CHỐT (COMMITTED) lưu DB
   Executor MT5 thực thi (nếu có lệnh)
   Refresh:
     - Nếu TotalLot == 0 (toàn bộ lệnh đã đóng) → ĐÓNG MACRO CYCLE → submit_feedback / record_lesson → PairState = FLAT

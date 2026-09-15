@@ -2,7 +2,10 @@
 
 Tài liệu đặc tả nghiệp vụ và kiến trúc luồng dành cho **Business Analyst (BA)** và đội ngũ phát triển (Dev / QA) trong dự án **Giao dịch Tự động hóa Agent-to-Agent (A2A)**.
 
-> 📢 **BẢN NÂNG CẤP MỚI NHẤT DÀNH CHO DEV:** Xem tài liệu đặc tả kiến trúc hai tầng chu kỳ và lập kế hoạch đa kịch bản tại [`UPGRADE_CONTINGENCY_PLAN_SPEC.md`](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md) (Tiết kiệm 80% Token, Stateful Contingency Planning, bỏ Agent C, A & B tự điều đình).
+> 📢 **BẢN NÂNG CẤP MỚI NHẤT (v2.1):** 
+> - 📄 **[NANG_CAP_PLAN_TAM_CHOT_PRICE_ACTION_PRUNING.md](NANG_CAP_PLAN_TAM_CHOT_PRICE_ACTION_PRUNING.md)**: Tổng hợp nâng cấp Plan Tạm vs Plan Chốt, Lực nến Price Action và Thuật toán Cắt tỉa kịch bản (Plan Pruning).
+> - 📄 **[UPGRADE_CONTINGENCY_PLAN_SPEC.md](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md)**: Tài liệu đặc tả kỹ thuật chi tiết nhất (JSON Schemas, SQL DDL, Sequence Diagram).
+> - 📄 **[TONG_HOP_THAY_DOI_NANG_CAP.md](TONG_HOP_THAY_DOI_NANG_CAP.md)**: Tổng hợp nâng cấp v2.0 về kiến trúc chu kỳ hai tầng (Macro/Micro Cycle).
 
 ---
 

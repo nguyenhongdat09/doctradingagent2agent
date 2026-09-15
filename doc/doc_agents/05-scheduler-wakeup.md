@@ -76,12 +76,13 @@ next_wake_at = now + interval
 ```
 
 > Tại mỗi lần wake C3 (hoặc C0 H1 close):
-> 1. Engine load **Active Contingency Plan** kỳ trước + chỉ cập nhật `DeltaMarketSnapshot` (giá Bid/Ask, nến mới nhất, PnL) — **KHÔNG gửi lại 30 nến lịch sử**.
-> 2. **Pre-check Trigger:** So khớp giá thị trường hiện tại với các kịch bản trong Active Plan:
->    - Nếu chạm mốc `DOWNSIDE` (DCA) hoặc `UPSIDE` (TP) đã định trước: Kích hoạt quy trình Fast Consensus (A và B xác nhận khớp đúng cam kết) → Enqueue thực thi ngay.
+> 1. Engine load duy nhất **PLAN CHỐT (COMMITTED)** kỳ trước + chỉ cập nhật `DeltaMarketSnapshot` (giá Bid/Ask, nến mới nhất, PnL) — **KHÔNG gửi lại 30 nến lịch sử và CẤM phân tích lại biểu đồ từ đầu**.
+> 2. **Pre-check Price Action & Trigger:** So khớp nến mới và giá thị trường với các kịch bản trong Plan Chốt:
+>    - Nếu giá chạm vùng cản **VÀ xuất hiện nến xác nhận hãm lực / rút râu (`candle_reaction`)**: Kích hoạt quy trình Fast Consensus (A và B xác nhận khớp đúng cam kết) → Enqueue thực thi ngay.
+>    - Nếu chạm vùng nhưng nến đi quá mạnh (thân đặc, chưa hãm lực): Không vào lệnh chặn đầu xe lửa; kích hoạt **Thuật toán Plan Pruning** (xóa nhánh đối lập đã lỗi thời, dời vùng cản và thắt chặt điều kiện nến cho Plan Chốt mới).
 >    - Nếu chạm `INVALIDATION`: Thực thi đóng rổ lệnh khẩn cấp.
 >    - Nếu rơi vào `STANDBY`: Giữ nguyên lệnh, không gọi LLM suy nghĩ lại từ đầu, hẹn giờ wake tiếp theo.
-> 3. Chỉ khi kịch bản cũ bị phá vỡ hoặc cần tái lập kế hoạch mới, A và B mới tiến hành họp sinh `Unified Contingency Plan` mới.
+> 3. Chỉ khi cần tái lập kế hoạch mới hoặc Plan Pruning, A và B mới tiến hành họp sinh `Plan Tạm` $\rightarrow$ hòa giải $\rightarrow$ `Plan Chốt` mới.
 
 ## 6. BossWake interrupt
 
