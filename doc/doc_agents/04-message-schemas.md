@@ -93,6 +93,33 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
 }
 ```
 
+## 0c. MacroPlanTimelineMemory (Ký ức xuyên suốt các Plan đã thực hiện trong Macro Cycle)
+
+```json
+{
+  "macro_cycle_id": "MC_AUDCAD_001",
+  "symbol": "AUDCAD",
+  "current_basket": {
+    "orders": 1,
+    "total_lot": 0.05,
+    "basket_dir": "BUY",
+    "avg_price": 0.8950,
+    "floating_profit": 12.5
+  },
+  "plan_history_timeline": [
+    {
+      "plan_id": "PLAN_001",
+      "micro_cycle_id": 1,
+      "plan_status": "EXECUTED",
+      "action_taken": "ENTRY BUY 0.05 lot @ 0.8950",
+      "executed_at": "ISO-8601",
+      "rationale": "D1 UPTREND, H1 ép giá chạm hỗ trợ EMA200 hãm lực nến rút râu."
+    }
+  ],
+  "instruction": "Kế hoạch trước đã khớp lệnh xong. Hãy phân tích vị thế mới và lập PLAN CHỐT TIẾP THEO để quản lý vị thế (DCA ở đâu, TP ở đâu, Invalidation ở đâu)."
+}
+```
+
 ## 2. MarketAssessment (Agent B — độc lập)
 
 ```json
@@ -140,6 +167,9 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "created_at": "ISO-8601",
   "symbol": "AUDCAD",
   "plan_state": "PROVISIONAL|COMMITTED",
+  "plan_status": "ACTIVE|EXECUTED|CANCELLED",
+  "executed_at": "ISO-8601|null",
+  "execution_notes": "string|null",
   "base_price": 0.8950,
   "context_trend": "UPTREND_PULLBACK|DOWNTREND_PULLBACK|SIDEWAY_BOUNDARY",
   "scenarios": {
