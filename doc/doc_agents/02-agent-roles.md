@@ -24,13 +24,39 @@
 - Độc lập đọc snapshot/delta + MemoryPack; bắt lỗi A vi phạm bài học AVOID.
 - `ReviewBallot` đủ field; CHALLENGE khi cần.
 - **Bắt buộc cung cấp `CounterPlan` cụ thể khi không đồng thuận:** Chỉ rõ đang chờ điều kiện gì (mốc giá, nến xác nhận), nếu thị trường TĂNG thì làm gì, nếu GIẢM thì làm gì.
+# 02 — Agent Roles
+
+## 1. Agent A — Planner (không phải Executor sàn)
+
+### Trách nhiệm
+- Tự fetch D1/H1 khi bắt đầu Macro Cycle; ở Micro Cycle sau chỉ nạp Active Plan + Delta Data.
+- `get_memory_pack` trước khi lập plan; đưa pack vào lập luận.
+- Soạn `TradePlan` kèm `ContingencyPlan` đa kịch bản (UPSIDE / DOWNSIDE / INVALIDATION / STANDBY).
+- Tiếp nhận `CounterPlan` từ Agent B để hòa giải (Reconcile) thành Unified Plan (≤2 vòng/cycle).
+- Trong `BOSS`: tiếp nhận ý Boss; **không** được execute khi B dissent.
+- Sau consensus + HardPass → **`enqueue_order(...)`** = INSERT `MarketOrderInfo` status=`PENDING`.
+- Lưu `Unified Contingency Plan` vào DB để làm kim chỉ nam cho Micro Cycle kế tiếp.
+- Set wake C1–C3; sau khi đóng sạch rổ lệnh (kết thúc Macro Cycle) gọi `submit_feedback` / `record_lesson`.
+
+### Không được
+- Gọi `OrderSend` / đóng lệnh MT5 trực tiếp.
+- Enqueue khi thiếu B.APPROVE (AUTO và BOSS).
+- Bỏ HardValidator / invent swing.
+- Kết thúc chu kỳ mà không sinh Unified Contingency Plan 2 đầu (Tăng / Giảm).
+
+## 2. Agent B — Independent Challenger
+
+### Trách nhiệm
+- Độc lập đọc snapshot/delta + MemoryPack; bắt lỗi A vi phạm bài học AVOID.
+- `ReviewBallot` đủ field; CHALLENGE khi cần.
+- **Bắt buộc cung cấp `CounterPlan` cụ thể khi không đồng thuận:** Chỉ rõ đang chờ điều kiện gì (mốc giá, nến xác nhận), nếu thị trường TĂNG thì làm gì, nếu GIẢM thì làm gì.
 - Trong BOSS: phản biện cả Boss nếu trái data/rails.
 
 ### Không được
 - APPROVE không `counter_evidence`; ba phải; enqueue/OrderSend.
 - **Từ chối khống (Passive Dissent):** Cấm chỉ REJECT/CHALLENGE chung chung mà không đưa ra Counter-Plan định lượng mốc giá/điều kiện chờ.
 
-## 3. Subagent C — The Scribe (Thư Ký Biên Niên Sử / Worker Subagent)
+## 3. Subagent PlanSummarizer (Thư Ký Tóm Tắt Kế Hoạch / Worker Subagent)
 
 ### Trách nhiệm
 - **Kích hoạt One-shot:** Chỉ được Orchestrator đánh thức khi một Plan Chốt chuyển sang trạng thái `DONE` (đã khớp lệnh, đã dời SL, đã chốt bớt, hoặc cắt lỗ).
@@ -60,7 +86,7 @@
 Hệ thống được thiết kế theo mô hình **Phân tầng (Tiered Architecture)** để chống xung đột khi mở rộng:
 1. **Tầng 1 — Core Decision Council (Hội đồng Quyết định):** Hiện tại gồm **Agent A** và **Agent B**. Nếu tương lai bổ sung **Agent C (Macro/Sentiment Director)** thành Agent chính thứ 3, chỉ cần đưa Agent C vào vòng biểu quyết (Consensus Quorum 100%).
 2. **Tầng 2 — Specialized Worker Subagents (Bộ Subagent việc vặt):**
-   - **Subagent C (The Scribe):** Đã hiện hữu, chuyên tóm tắt Plan khi `DONE`.
+   - **PlanSummarizer:** Đã hiện hữu, chuyên tóm tắt Plan khi `DONE`.
    - *Subagent News Scanner (Dự phòng):* Quét tin tức vĩ mô, cảnh báo đỏ.
    - *Subagent Math Calculator (Dự phòng):* Tính toán khoảng cách spacing, lot, ATR.
    - Các Subagent này hoạt động độc lập (Plug & Play), không có quyền can thiệp vào lệnh.
@@ -71,14 +97,14 @@ Hệ thống được thiết kế theo mô hình **Phân tầng (Tiered Archite
 
 | Thành phần | Làm | Không làm |
 |------------|-----|-----------|
-| Orchestrator | Wake, bus, session_mode, audit, HardValidator gate, kích hoạt Subagent C khi Plan DONE | Chọn hướng lệnh |
+| Orchestrator | Wake, bus, session_mode, audit, HardValidator gate, kích hoạt PlanSummarizer khi Plan DONE | Chọn hướng lệnh |
 | Executor Thread | Poll PENDING → claim PROCESSING → MT5 OrderSend/Close → Archive hoặc FAILED | Sinh plan |
 
 ---
 
 ## 7. RACI Ma Trận Vai Trò
 
-| Việc | A (Planner) | B (Challenger) | Subagent C (Scribe) | Boss | Orch | Executor |
+| Việc | A (Planner) | B (Challenger) | PlanSummarizer | Boss | Orch | Executor |
 |------|---|---|---|---|---|---|
 | Fetch / MemoryPack | R | R | — | C | I | — |
 | Draft plan | R | C | — | C (BOSS) | I | — |

@@ -1,6 +1,6 @@
-# 📋 TỔNG HỢP NÂNG CẤP: VÒNG ĐỜI PLAN (ACTIVE/DONE), BÌA CARTON MACRO CYCLE & SUBAGENT C (SCRIBE)
+# 📋 TỔNG HỢP NÂNG CẤP: VÒNG ĐỜI PLAN (ACTIVE/DONE), BÌA CARTON MACRO CYCLE & PLANSUMMARIZER
 > **Ngày phát hành:** 18/09/2026  
-> **Phiên bản:** Kiến trúc A2A v2.3 — *Multi-session Plan Persistence, Context Scribe Subagent & Tiered Extensible Agent Architecture*  
+> **Phiên bản:** Kiến trúc A2A v2.3 — *Multi-session Plan Persistence, PlanSummarizer Subagent & Tiered Extensible Agent Architecture*  
 > **Dành cho:** Toàn bộ đội ngũ Phát triển (AI Prompt Engineer, Backend Dev, Database Admin, QA/Tester)
 
 ---
@@ -17,7 +17,7 @@ Trong hệ thống giao dịch tự động hóa bằng AI, hai sai lầm lớn 
 Bản nâng cấp **v2.3** giải quyết dứt điểm các vấn đề trên thông qua **4 trụ cột kiến trúc**:
 - **Mô hình "Bìa Carton & Các Tờ Giấy Plan Chốt":** Quản lý trọn vẹn chiến dịch từ lúc chưa có lệnh (FLAT) cho đến khi đóng sạch lệnh.
 - **Hai trạng thái sống của Plan Chốt (`ACTIVE` vs `DONE`):** Duy trì hiệu lực xuyên suốt nhiều chu kỳ nến mà không phân tích lại thị trường.
-- **Subagent C — The Scribe (Thư ký biên niên sử):** Chuyên trách tóm tắt ngắn gọn khách quan khi một Plan chuyển sang `DONE`, không làm loãng vai trò của A & B.
+- **Subagent PlanSummarizer (Thư ký tóm tắt Plan):** Chuyên trách tóm tắt ngắn gọn khách quan khi một Plan chuyển sang `DONE`, không làm loãng vai trò của A & B.
 - **Kiến trúc Phân tầng Mở rộng Tương lai (Tiered Extensible Architecture):** Thiết kế sẵn sàng để sau này bổ sung thêm các Subagent việc vặt (quét tin tức, tính lot/spread...) hoặc nâng cấp thêm Agent chính (Agent C) mà hoàn toàn **không gây xung đột (conflict)** với hệ thống hiện tại.
 
 ---
@@ -29,18 +29,19 @@ Một chiến dịch giao dịch được ví như **một chiếc bìa carton (
 ```
 [BẮT ĐẦU BÌA CARTON: Tài khoản FLAT (0 lệnh)]
    │
-   ├─► TỜ GIẤY 1: Plan Chốt 1 (ACTIVE) ──(Chờ đợi/Thực thi)──► [DONE] ──► Subagent C: [SUMMARY 1]
+   ├─► TỜ GIẤY 1: Plan Chốt 1 (ACTIVE) ──(Chờ đợi/Thực thi)──► [DONE] ──► PlanSummarizer: [SUMMARY 1]
    │                                                                            │
-   ├─► TỜ GIẤY 2: Bàn Plan 2 (kèm SUMMARY 1) ──► Plan 2 (ACTIVE) ──► [DONE] ──► Subagent C: [SUMMARY 2]
+   ├─► TỜ GIẤY 2: Bàn Plan 2 (kèm SUMMARY 1) ──► Plan 2 (ACTIVE) ──► [DONE] ──► PlanSummarizer: [SUMMARY 2]
    │                                                                            │
-   ├─► TỜ GIẤY 3: Bàn Plan 3 (kèm SUMMARY 1 + 2) ──► Plan 3 (ACTIVE) ──► [DONE] ──► Subagent C: [SUMMARY 3]
+   ├─► TỜ GIẤY 3: Bàn Plan 3 (kèm SUMMARY 1 + 2) ──► Plan 3 (ACTIVE) ──► [DONE] ──► PlanSummarizer: [SUMMARY 3]
    │   ...
    ▼
 [ĐÓNG BÌA CARTON: Toàn bộ rổ lệnh được CLEAR hoàn toàn (Chốt lời hết / Cắt lỗ hết)]
 ```
 
 ### Vòng lặp chuẩn mực:
-$$\text{Bàn luận} \rightarrow \text{Chốt Plan 1 (ACTIVE)} \rightarrow \text{Thực thi} \rightarrow \text{Plan 1 DONE} \rightarrow \text{C tóm tắt Plan 1} \rightarrow \text{Mang Summary 1 bàn Plan 2} \rightarrow \text{Chốt Plan 2 (ACTIVE)} \dots$$
+$$\text{Bàn luận} \rightarrow \text{Chốt Plan 1 (ACTIVE)} \rightarrow \text{Thực thi} \rightarrow \text{Plan 1 DONE} \rightarrow \text{PlanSummarizer tóm tắt Plan 1} \rightarrow \text{Mang Summary 1 bàn Plan 2} \dots$$
+
 
 ---
 
@@ -65,20 +66,20 @@ Plan chốt là một **Contingency Plan đa kịch bản 360 độ** (chứa nh
     + *Biến thể Cắt lỗ:* Giá vi phạm mốc Invalidation, đã đóng sạch lệnh bảo toàn vốn $\rightarrow$ `DONE` (kết thúc luôn Bìa Carton).
 - **Hành động ngay khi `DONE`:**
   - Cập nhật DB: `plan_status = 'DONE'`, `is_active = FALSE`.
-  - Đánh thức **Subagent C (The Scribe)** để ghi nhận biên niên sử.
+  - Đánh thức **PlanSummarizer** để ghi nhận biên niên sử.
 
 ---
 
-## ✍️ 4. Subagent C — The Scribe (Thư Ký Biên Niên Sử)
+## ✍️ 4. Subagent PlanSummarizer (Thư Ký Tóm Tắt Plan)
 
-Để giữ nguyên bản sắc của **Agent A (Chiến lược)** và **Agent B (Phản biện rủi ro khắt khe)**, nhiệm vụ tóm tắt được giao trọn vẹn cho **Subagent C**:
+Để giữ nguyên bản sắc của **Agent A (Chiến lược)** và **Agent B (Phản biện rủi ro khắt khe)**, nhiệm vụ tóm tắt được giao trọn vẹn cho **PlanSummarizer**:
 
-### Đặc điểm của Subagent C:
+### Đặc điểm của PlanSummarizer:
 1. **One-shot & Siêu nhẹ:** Chỉ được Orchestrator kích hoạt khi có sự kiện `plan_status = 'DONE'`. Sau khi viết tóm tắt xong thì tắt ngay, không tốn tài nguyên.
-2. **Chi phí token gần như bằng 0:** Subagent C chỉ làm nhiệm vụ trích xuất thông tin nên được chỉ định dùng các **mô hình AI siêu nhanh, siêu rẻ** (như `Gemini 1.5 Flash`, `GPT-4o-mini`, `Claude 3.5 Haiku`).
+2. **Chi phí token gần như bằng 0:** PlanSummarizer chỉ làm nhiệm vụ trích xuất thông tin nên được chỉ định dùng các **mô hình AI siêu nhanh, siêu rẻ** (như `Gemini 1.5 Flash`, `GPT-4o-mini`, `Claude 3.5 Haiku`).
 3. **Trung lập & Khách quan tuyệt đối (Ground Truth):** Không thiên vị, không tranh luận, ghi chép chính xác những gì vừa diễn ra thành **2 - 3 dòng gạch đầu dòng**.
 
-### Ví dụ kết quả tóm tắt của Subagent C:
+### Ví dụ kết quả tóm tắt của PlanSummarizer:
 ```text
 [SUMMARY PLAN #1 - DONE]
 - Hành động: Đã khớp lệnh SELL 0.10 lot tại 2315.00 theo kịch bản D1 Downtrend chạm cản H1 rút râu.
@@ -102,15 +103,15 @@ graph TD
     end
 
     subgraph TANG_2["TẦNG 2: CÁC SUBAGENT CHUYÊN TRÁCH VIỆC VẶT (WORKER SUBAGENTS SUITE)"]
-        SubC["Subagent C — The Scribe (Thư ký)<br/>Tóm tắt Plan khi DONE -> Timeline"]
+        SubSum["PlanSummarizer (Thư ký tóm tắt)<br/>Tóm tắt Plan khi DONE -> Timeline"]
         SubNews["[Dự phòng] Subagent News Scanner<br/>Quét lịch tin tức, Non-Farm, CPI"]
         SubMath["[Dự phòng] Subagent Math/Lot Calculator<br/>Tính toán Spacing, ATR, Lot chính xác"]
         SubQA["[Dự phòng] Subagent Post-Mortem QA<br/>Đúc kết bài học khi đóng Bìa Carton"]
     end
 
     AgentA & AgentB -->|"Chốt Plan (ACTIVE)"| Engine["Orchestrator & Execution Engine"]
-    Engine -->|"Sự kiện DONE"| SubC
-    SubC -->|"Lưu tóm tắt vào DB"| DB[(Database Memory)]
+    Engine -->|"Sự kiện DONE"| SubSum
+    SubSum -->|"Lưu tóm tắt vào DB"| DB[(Database Memory)]
     DB -->|"Đính kèm chuỗi Summary"| AgentA & AgentB
     SubNews -.->|"Cung cấp dữ liệu vệ tinh"| AgentA & AgentB
     SubMath -.->|"Tính toán phụ trợ"| AgentA
@@ -126,7 +127,7 @@ graph TD
 ## 🛠️ 6. Hướng Dẫn Kỹ Thuật Dành Cho Dev
 
 ### Cho Database Admin:
-Cập nhật bảng `contingency_plans` để hỗ trợ đầy đủ 2 trạng thái và lưu trữ tóm tắt của Subagent C:
+Cập nhật bảng `contingency_plans` để hỗ trợ đầy đủ 2 trạng thái và lưu trữ tóm tắt của PlanSummarizer:
 ```sql
 ALTER TABLE contingency_plans 
 ADD COLUMN plan_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'; 
@@ -134,20 +135,21 @@ ADD COLUMN plan_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE';
 
 ALTER TABLE contingency_plans 
 ADD COLUMN summary_text TEXT NULL;
--- Lưu chuỗi tóm tắt 2-3 dòng do Subagent C sinh ra ngay khi plan chuyển sang DONE
+-- Lưu chuỗi tóm tắt 2-3 dòng do PlanSummarizer sinh ra ngay khi plan chuyển sang DONE
 ```
 
 ### Cho Backend / Orchestrator Dev:
 1. **Khi Plan đang `ACTIVE`:** Mỗi nhịp wake C0 (H1 close) hoặc C3: Chỉ nạp Plan `ACTIVE` + Delta giá nến mới. CẤM gọi LLM phân tích lại toàn bộ thị trường.
 2. **Khi phát hiện một nhánh hành động đã hoàn tất (Vào lệnh / Dời SL / Chốt bớt):**
    - Đánh dấu Plan cũ: `plan_status = 'DONE'`, `is_active = FALSE`.
-   - Kích hoạt One-shot **Subagent C**: truyền vào Plan vừa xong + thông tin thực thi thực tế.
-   - Nhận `summary_text` từ C và lưu vào DB.
+   - Kích hoạt One-shot **PlanSummarizer**: truyền vào Plan vừa xong + thông tin thực thi thực tế.
+   - Nhận `summary_text` từ PlanSummarizer và lưu vào DB.
 3. **Khi bắt đầu chu kỳ bàn Plan tiếp theo:**
    - Trích xuất toàn bộ `summary_text` của các Plan đã `DONE` trong Macro Cycle hiện tại thành chuỗi `plan_history_summaries`.
    - Đính kèm vào System Prompt đầu vào của Agent A và Agent B.
 
 ### Cho Prompt Engineer:
-- **System Prompt Subagent C:** *"Bạn là Thư ký Biên niên sử (The Scribe) trung lập. Nhiệm vụ duy nhất của bạn là đúc kết Kế hoạch vừa hoàn thành thành 2-3 gạch đầu dòng súc tích: Hành động đã làm, Hiện trạng vị thế và Mức độ rủi ro hiện tại. Tuyệt đối không đưa cảm xúc hay phân tích dài dòng."*
+- **System Prompt PlanSummarizer:** *"Bạn là Thư ký Tóm tắt Kế hoạch (PlanSummarizer) trung lập. Nhiệm vụ duy nhất của bạn là đúc kết Kế hoạch vừa hoàn thành thành 2-3 gạch đầu dòng súc tích: Hành động đã làm, Hiện trạng vị thế và Mức độ rủi ro hiện tại. Tuyệt đối không đưa cảm xúc hay phân tích dài dòng."*
 - **Prompt Agent A & B ở các phiên sau:** *"Đọc kỹ khối [PLAN HISTORY SUMMARIES] để nắm rõ hiện trạng các bước đã đi trước đó. Cấm lặp lại các hành động đã thực hiện hoặc vào lệnh vi phạm khoảng cách an toàn với các lệnh trước."*
+
 

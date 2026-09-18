@@ -34,10 +34,11 @@ CONSENSUS_AUTO ⇔
 3. **Quy tắc Duy Trì Xuyên Suốt & Khóa Phân Tích (Multi-session Persistence & Lockdown Rule):**
    - Một Plan Chốt `ACTIVE` có thể kéo dài qua 1 chu kỳ, 5 chu kỳ hoặc nhiều chu kỳ nến cho đến khi có một nhánh hành động được thỏa mãn.
    - Ở tất cả các chu kỳ này: **CẤM các Agent phân tích lại biểu đồ từ đầu (No re-analysis)**, **CẤM tự ý vào lệnh mới bừa bãi**. Các Agent chỉ đóng vai trò giám sát: đối chiếu nến mới với kịch bản trong Plan Chốt (chưa khớp $\rightarrow$ STANDBY; khớp $\rightarrow$ thực thi).
-4. **Chuyển sang trạng thái `DONE` & Kích hoạt Subagent C (Scribe):**
+4. **Chuyển sang trạng thái `DONE` & Kích hoạt PlanSummarizer:**
    - Khi một nhánh hành động then chốt (vào lệnh, dời SL, chốt bớt, cắt lỗ) đã thực thi xong $\rightarrow$ Plan chuyển sang `plan_status = 'DONE'`, `is_active = FALSE`.
-   - Ngay lập tức, Orchestrator kích hoạt **Subagent C (The Scribe)** tóm tắt trung lập diễn biến thành 2-3 gạch đầu dòng (`summary_text`) và lưu vào DB.
+   - Ngay lập tức, Orchestrator kích hoạt **PlanSummarizer** tóm tắt trung lập diễn biến thành 2-3 gạch đầu dòng (`summary_text`) và lưu vào DB.
    - Ở chu kỳ sau, toàn bộ chuỗi các `summary_text` được đính kèm vào context để A và B thảo luận cho Plan Chốt tiếp theo trong Macro Cycle.
+
 
 ### Quy tắc Bắt Buộc Khi B Không Đồng Thuận (Dissent Protocol):
 1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {REJECT, CHALLENGE}`, ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:

@@ -127,14 +127,15 @@ Khi thị trường tăng vọt hoặc xả mạnh một chiều không có dấ
    - Bổ sung yêu cầu: *"Chờ nến H1 rút râu trên hoặc xuất hiện 2 nến đỏ liên tiếp xác nhận hãm lực hoàn toàn mới được Bán"*.
 3. **Lợi ích:** Kích thước Plan gửi cho LLM ở chu kỳ sau siêu ngắn, loại bỏ nhiễu, tập trung 100% năng lực suy luận.
 
-### 3.3. Chu Trình Plan Hoàn Thành (DONE) -> Subagent C (The Scribe) & Timeline Memory
+### 3.3. Chu Trình Plan Hoàn Thành (DONE) -> PlanSummarizer & Timeline Memory
 Khi một kịch bản hành động trong Plan Chốt (vào lệnh, dời SL hòa vốn, chốt bớt khối lượng, hoặc cắt lỗ khẩn cấp) được kích hoạt và thực thi thành công:
 1. **Chuyển trạng thái sang `DONE`:**
    - Plan hiện tại được cập nhật: `plan_status = 'DONE'`, `is_active = FALSE`.
    - Ghi nhận thực thi: `executed_at = now()`, `execution_notes = "Chi tiết lệnh: ticket, action, lot, giá khớp hoặc SL mới"`.
-2. **Kích hoạt One-shot Subagent C (The Scribe):**
-   - Orchestrator gọi Subagent C (dùng model siêu nhẹ, rẻ như Gemini Flash / GPT-4o-mini).
-   - Subagent C cô đọng diễn biến thành 2-3 gạch đầu dòng trung lập (`summary_text`) và lưu vào cột `summary_text` của bảng `contingency_plans`.
+2. **Kích hoạt One-shot PlanSummarizer:**
+   - Orchestrator gọi PlanSummarizer (dùng model siêu nhẹ, rẻ như Gemini Flash / GPT-4o-mini).
+   - PlanSummarizer cô đọng diễn biến thành 2-3 gạch đầu dòng trung lập (`summary_text`) và lưu vào cột `summary_text` của bảng `contingency_plans`.
+
 3. **Chu kỳ tiếp theo — Mang theo chuỗi `plan_history_summaries` để bàn Plan mới:**
    - Khi bước vào chu kỳ bàn luận kế hoạch tiếp theo của Macro Cycle (Bìa Carton), Orchestrator nạp danh sách toàn bộ các bản tóm tắt của Plan trước vào context của Agent A & B.
    - Nhờ vậy, Agent A và B:
@@ -358,7 +359,7 @@ CREATE TABLE contingency_plans (
     is_active BOOLEAN DEFAULT TRUE,             -- Chỉ 1 plan là ACTIVE cho mỗi macro_cycle
     executed_at TIMESTAMP NULL,                 -- Thời điểm khớp lệnh hoặc thực thi hành động
     execution_notes TEXT NULL,                  -- Chi tiết lệnh: ticket, lot, giá thực tế, SL mới
-    summary_text TEXT NULL,                     -- Bản tóm tắt 2-3 dòng do Subagent C (The Scribe) đúc kết khi plan DONE
+    summary_text TEXT NULL,                     -- Bản tóm tắt 2-3 dòng do PlanSummarizer đúc kết khi plan DONE
     agent_a_draft_json TEXT NOT NULL,           -- Đề xuất gốc của Agent A
     agent_b_counter_json TEXT NULL,             -- Phản biện & Counter-plan của B (nếu có)
     unified_plan_json TEXT NOT NULL,            -- Kế hoạch thống nhất cuối cùng (Scenarios đầy đủ Price Action)
