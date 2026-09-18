@@ -1,6 +1,6 @@
-# 📋 TỔNG HỢP NÂNG CẤP: VÒNG ĐỜI PLAN (ACTIVE/DONE), BÌA CARTON MACRO CYCLE & PLANSUMMARIZER
+# 📋 TỔNG HỢP NÂNG CẤP: VÒNG ĐỜI PLAN (ACTIVE/DONE), BÌA CARTON MACRO CYCLE & PLANSUMMARIZER WORKER
 > **Ngày phát hành:** 18/09/2026  
-> **Phiên bản:** Kiến trúc A2A v2.3 — *Multi-session Plan Persistence, PlanSummarizer Subagent & Tiered Extensible Agent Architecture*  
+> **Phiên bản:** Kiến trúc A2A v2.3 — *Multi-session Plan Persistence, PlanSummarizer Worker & Tiered Extensible Architecture*  
 > **Dành cho:** Toàn bộ đội ngũ Phát triển (AI Prompt Engineer, Backend Dev, Database Admin, QA/Tester)
 
 ---
@@ -17,8 +17,9 @@ Trong hệ thống giao dịch tự động hóa bằng AI, hai sai lầm lớn 
 Bản nâng cấp **v2.3** giải quyết dứt điểm các vấn đề trên thông qua **4 trụ cột kiến trúc**:
 - **Mô hình "Bìa Carton & Các Tờ Giấy Plan Chốt":** Quản lý trọn vẹn chiến dịch từ lúc chưa có lệnh (FLAT) cho đến khi đóng sạch lệnh.
 - **Hai trạng thái sống của Plan Chốt (`ACTIVE` vs `DONE`):** Duy trì hiệu lực xuyên suốt nhiều chu kỳ nến mà không phân tích lại thị trường.
-- **Subagent PlanSummarizer (Thư ký tóm tắt Plan):** Chuyên trách tóm tắt ngắn gọn khách quan khi một Plan chuyển sang `DONE`, không làm loãng vai trò của A & B.
-- **Kiến trúc Phân tầng Mở rộng Tương lai (Tiered Extensible Architecture):** Thiết kế sẵn sàng để sau này bổ sung thêm các Subagent việc vặt (quét tin tức, tính lot/spread...) hoặc nâng cấp thêm Agent chính (Agent C) mà hoàn toàn **không gây xung đột (conflict)** với hệ thống hiện tại.
+- **PlanSummarizer Worker (Background AI Worker của Orchestrator):** Chuyên trách tóm tắt ngắn gọn khách quan khi một Plan chuyển sang `DONE`. Đây là một Worker chạy ngầm độc lập do Orchestrator điều động tại luồng sự kiện hậu kỳ (Post-Execution Lifecycle Hook), hoàn toàn **không phải do Agent A hay B gọi**, giúp giải phóng hoàn toàn và không làm loãng vai trò của A & B.
+- **Kiến trúc Phân tầng Mở rộng Tương lai (Tiered Extensible Architecture):** Thiết kế sẵn sàng để sau này bổ sung thêm các Background AI Workers việc vặt (quét tin tức, tính lot/spread...) hoặc nâng cấp thêm Agent chính (Agent C) mà hoàn toàn **không gây xung đột (conflict)** với hệ thống hiện tại.
+
 
 ---
 
@@ -70,16 +71,16 @@ Plan chốt là một **Contingency Plan đa kịch bản 360 độ** (chứa nh
 
 ---
 
-## ✍️ 4. Subagent PlanSummarizer (Thư Ký Tóm Tắt Plan)
+## ✍️ 4. PlanSummarizer Worker (Post-Execution AI Worker Của Orchestrator)
 
-Để giữ nguyên bản sắc của **Agent A (Chiến lược)** và **Agent B (Phản biện rủi ro khắt khe)**, nhiệm vụ tóm tắt được giao trọn vẹn cho **PlanSummarizer**:
+> **LƯU Ý VỀ MẶT KIẾN TRÚC:** `PlanSummarizer` **KHÔNG PHẢI là Subagent** của Agent A hay B. Nó xuất hiện ở một luồng hoàn toàn độc lập (Post-Execution Lifecycle Hook do Orchestrator kích hoạt sau khi sàn khớp lệnh). Agent A và B không hề gọi, không quản lý và không bị phân tâm bởi tiến trình này.
 
-### Đặc điểm của PlanSummarizer:
+### Đặc điểm của PlanSummarizer Worker:
 1. **One-shot & Siêu nhẹ:** Chỉ được Orchestrator kích hoạt khi có sự kiện `plan_status = 'DONE'`. Sau khi viết tóm tắt xong thì tắt ngay, không tốn tài nguyên.
 2. **Chi phí token gần như bằng 0:** PlanSummarizer chỉ làm nhiệm vụ trích xuất thông tin nên được chỉ định dùng các **mô hình AI siêu nhanh, siêu rẻ** (như `Gemini 1.5 Flash`, `GPT-4o-mini`, `Claude 3.5 Haiku`).
 3. **Trung lập & Khách quan tuyệt đối (Ground Truth):** Không thiên vị, không tranh luận, ghi chép chính xác những gì vừa diễn ra thành **2 - 3 dòng gạch đầu dòng**.
 
-### Ví dụ kết quả tóm tắt của PlanSummarizer:
+### Ví dụ kết quả tóm tắt của PlanSummarizer Worker:
 ```text
 [SUMMARY PLAN #1 - DONE]
 - Hành động: Đã khớp lệnh SELL 0.10 lot tại 2315.00 theo kịch bản D1 Downtrend chạm cản H1 rút râu.
@@ -93,7 +94,7 @@ Chuỗi này được lưu vào cột `summary_text` của bảng `contingency_p
 
 ## 🏛️ 5. Kiến Trúc Phân Tầng Mở Rộng Tương Lai (Tiered Extensible Architecture)
 
-Để đảm bảo sau này bổ sung thêm các Subagent việc vặt hoặc nâng cấp thêm Agent chính mà **hoàn toàn không gây xung đột (conflict)** với hệ thống hiện tại, tài liệu định hình rõ 2 tầng:
+Để đảm bảo sau này bổ sung thêm các Background Workers việc vặt hoặc nâng cấp thêm Agent chính mà **hoàn toàn không gây xung đột (conflict)** với hệ thống hiện tại, tài liệu định hình rõ 2 tầng:
 
 ```mermaid
 graph TD
@@ -102,25 +103,26 @@ graph TD
         FutureAgentC["[Dự phòng tương lai]<br/>Agent C (Macro/Sentiment Director)<br/>(Tham gia biểu quyết nếu có)"] -.-> AgentA
     end
 
-    subgraph TANG_2["TẦNG 2: CÁC SUBAGENT CHUYÊN TRÁCH VIỆC VẶT (WORKER SUBAGENTS SUITE)"]
-        SubSum["PlanSummarizer (Thư ký tóm tắt)<br/>Tóm tắt Plan khi DONE -> Timeline"]
-        SubNews["[Dự phòng] Subagent News Scanner<br/>Quét lịch tin tức, Non-Farm, CPI"]
-        SubMath["[Dự phòng] Subagent Math/Lot Calculator<br/>Tính toán Spacing, ATR, Lot chính xác"]
-        SubQA["[Dự phòng] Subagent Post-Mortem QA<br/>Đúc kết bài học khi đóng Bìa Carton"]
+    subgraph TANG_2["TẦNG 2: CÁC BACKGROUND AI WORKERS DO ORCHESTRATOR ĐIỀU PHỐI (ORCHESTRATOR SERVICES)"]
+        SubSum["PlanSummarizer Worker (Tóm tắt Plan)<br/>Tóm tắt Plan khi DONE -> Timeline"]
+        SubNews["[Dự phòng] NewsScanner Worker<br/>Quét lịch tin tức, Non-Farm, CPI"]
+        SubMath["[Dự phòng] MathCalculator Worker<br/>Tính toán Spacing, ATR, Lot chính xác"]
+        SubQA["[Dự phòng] PostMortemQA Worker<br/>Đúc kết bài học khi đóng Bìa Carton"]
     end
 
     AgentA & AgentB -->|"Chốt Plan (ACTIVE)"| Engine["Orchestrator & Execution Engine"]
-    Engine -->|"Sự kiện DONE"| SubSum
+    Engine -->|"Sự kiện DONE (Post-Exec Hook)"| SubSum
     SubSum -->|"Lưu tóm tắt vào DB"| DB[(Database Memory)]
     DB -->|"Đính kèm chuỗi Summary"| AgentA & AgentB
-    SubNews -.->|"Cung cấp dữ liệu vệ tinh"| AgentA & AgentB
-    SubMath -.->|"Tính toán phụ trợ"| AgentA
+    SubNews -.->|"Cung cấp dữ liệu vệ tinh"| Engine
+    SubMath -.->|"Tính toán phụ trợ"| Engine
 ```
 
 ### Quy tắc bất biến chống conflict:
-1. **Quyền biểu quyết lệnh (Consensus Gate):** Chỉ thuộc về các Agent ở **Tầng 1** (hiện tại là A & B). Các Subagent ở **Tầng 2** tuyệt đối không can thiệp vào biểu quyết, không có quyền phủ quyết lệnh.
-2. **Subagents là các module độc lập (Plug & Play):** Bổ sung hoặc gỡ bỏ một Subagent việc vặt (như News Scanner, Math Calculator) hoàn toàn không làm gián đoạn luồng giao dịch của A và B.
+1. **Quyền biểu quyết lệnh (Consensus Gate):** Chỉ thuộc về các Agent ở **Tầng 1** (hiện tại là A & B). Các AI Workers ở **Tầng 2** tuyệt đối không can thiệp vào biểu quyết, không có quyền phủ quyết lệnh.
+2. **Workers là các dịch vụ nền độc lập (Plug & Play):** Bổ sung hoặc gỡ bỏ một Worker việc vặt (như NewsScanner, MathCalculator) do Orchestrator gọi hoàn toàn không làm gián đoạn luồng giao dịch và consensus của A và B.
 3. **Nếu tương lai thêm Agent C vào Tầng 1:** Chỉ cần bổ sung Agent C vào vòng biểu quyết đồng thuận (Consensus Quorum: A + B + C = 100% APPROVE), toàn bộ cơ chế Plan Lifecycle `ACTIVE`/`DONE` và Timeline Memory bên dưới vẫn giữ nguyên vẹn.
+
 
 ---
 

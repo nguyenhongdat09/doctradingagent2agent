@@ -56,7 +56,9 @@
 - APPROVE không `counter_evidence`; ba phải; enqueue/OrderSend.
 - **Từ chối khống (Passive Dissent):** Cấm chỉ REJECT/CHALLENGE chung chung mà không đưa ra Counter-Plan định lượng mốc giá/điều kiện chờ.
 
-## 3. Subagent PlanSummarizer (Thư Ký Tóm Tắt Kế Hoạch / Worker Subagent)
+## 3. PlanSummarizer Worker (Post-Execution AI Worker Của Orchestrator)
+
+> **LƯU Ý KIẾN TRÚC:** `PlanSummarizer` **KHÔNG PHẢI là Subagent** của Agent A hay Agent B. Nó là một AI Worker độc lập do Orchestrator kích hoạt tại luồng sự kiện hậu kỳ (Post-Execution Lifecycle Hook) sau khi lệnh trên MT5 khớp xong. Agent A và B không quản lý, không gọi và không bị ảnh hưởng bởi worker này.
 
 ### Trách nhiệm
 - **Kích hoạt One-shot:** Chỉ được Orchestrator đánh thức khi một Plan Chốt chuyển sang trạng thái `DONE` (đã khớp lệnh, đã dời SL, đã chốt bớt, hoặc cắt lỗ).
@@ -85,11 +87,13 @@
 
 Hệ thống được thiết kế theo mô hình **Phân tầng (Tiered Architecture)** để chống xung đột khi mở rộng:
 1. **Tầng 1 — Core Decision Council (Hội đồng Quyết định):** Hiện tại gồm **Agent A** và **Agent B**. Nếu tương lai bổ sung **Agent C (Macro/Sentiment Director)** thành Agent chính thứ 3, chỉ cần đưa Agent C vào vòng biểu quyết (Consensus Quorum 100%).
-2. **Tầng 2 — Specialized Worker Subagents (Bộ Subagent việc vặt):**
-   - **PlanSummarizer:** Đã hiện hữu, chuyên tóm tắt Plan khi `DONE`.
-   - *Subagent News Scanner (Dự phòng):* Quét tin tức vĩ mô, cảnh báo đỏ.
-   - *Subagent Math Calculator (Dự phòng):* Tính toán khoảng cách spacing, lot, ATR.
-   - Các Subagent này hoạt động độc lập (Plug & Play), không có quyền can thiệp vào lệnh.
+2. **Tầng 2 — Background AI Workers / Orchestrator Services (Các Dịch Vụ AI Chạy Ngầm Do Orchestrator Quản Lý):**
+   - **PlanSummarizer Worker:** Đã hiện hữu, chuyên tóm tắt Plan khi `DONE`.
+   - *NewsScanner Worker (Dự phòng):* Quét tin tức vĩ mô, cảnh báo đỏ cho Orchestrator nạp context.
+   - *MathCalculator Worker (Dự phòng):* Tính toán khoảng cách spacing, lot, ATR cho Orchestrator.
+   - *PostMortemQA Worker (Dự phòng):* Đúc kết bài học kinh nghiệm khi đóng Bìa Carton (Macro Cycle).
+   - Các Worker này hoạt động độc lập (Plug & Play), không có quyền can thiệp vào lệnh hay tham gia biểu quyết.
+
 
 ---
 
