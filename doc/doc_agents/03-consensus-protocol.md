@@ -28,10 +28,16 @@ CONSENSUS_AUTO ⇔
 → A & B sinh PLAN CHỐT (COMMITTED) cho chu kỳ tới
 ```
 
-### Quy tắc Vòng Đời: Plan Tạm (Provisional) vs Plan Chốt (Committed)
+### Quy tắc Vòng Đời: Plan Tạm (Provisional) vs Plan Chốt (Committed) & ACTIVE / DONE
 1. **Plan Tạm (`PROVISIONAL`):** Mọi bản thảo do A khởi tạo hoặc trong các vòng tranh luận đều là Plan Tạm. Plan Tạm chỉ nằm trong bộ nhớ đệm trao đổi giữa các Agent, **tuyệt đối không được kích hoạt lệnh hay lưu đè `is_active = TRUE` vào DB**.
-2. **Plan Chốt (`COMMITTED`):** Chỉ khi **100% Agent tham gia đồng thuận (`APPROVE`)**, Plan Tạm mới được phong cấp thành **Plan Chốt (`COMMITTED`)** và lưu vào DB với `is_active = TRUE`.
-3. **Quy tắc Khóa Phân Tích (Lockdown Rule):** Ở chu kỳ sau thức dậy, nếu đã có Plan Chốt, **CẤM các Agent phân tích lại biểu đồ từ đầu (No re-analysis)**. Các Agent chỉ đóng vai trò giám sát: đối chiếu nến mới với kịch bản Price Action trong Plan Chốt.
+2. **Plan Chốt (`COMMITTED`):** Chỉ khi **100% Agent trong Core Decision Council đồng thuận (`APPROVE`)**, Plan Tạm mới được phong cấp thành **Plan Chốt (`COMMITTED`)** và lưu vào DB với `is_active = TRUE`, `plan_status = 'ACTIVE'`.
+3. **Quy tắc Duy Trì Xuyên Suốt & Khóa Phân Tích (Multi-session Persistence & Lockdown Rule):**
+   - Một Plan Chốt `ACTIVE` có thể kéo dài qua 1 chu kỳ, 5 chu kỳ hoặc nhiều chu kỳ nến cho đến khi có một nhánh hành động được thỏa mãn.
+   - Ở tất cả các chu kỳ này: **CẤM các Agent phân tích lại biểu đồ từ đầu (No re-analysis)**, **CẤM tự ý vào lệnh mới bừa bãi**. Các Agent chỉ đóng vai trò giám sát: đối chiếu nến mới với kịch bản trong Plan Chốt (chưa khớp $\rightarrow$ STANDBY; khớp $\rightarrow$ thực thi).
+4. **Chuyển sang trạng thái `DONE` & Kích hoạt Subagent C (Scribe):**
+   - Khi một nhánh hành động then chốt (vào lệnh, dời SL, chốt bớt, cắt lỗ) đã thực thi xong $\rightarrow$ Plan chuyển sang `plan_status = 'DONE'`, `is_active = FALSE`.
+   - Ngay lập tức, Orchestrator kích hoạt **Subagent C (The Scribe)** tóm tắt trung lập diễn biến thành 2-3 gạch đầu dòng (`summary_text`) và lưu vào DB.
+   - Ở chu kỳ sau, toàn bộ chuỗi các `summary_text` được đính kèm vào context để A và B thảo luận cho Plan Chốt tiếp theo trong Macro Cycle.
 
 ### Quy tắc Bắt Buộc Khi B Không Đồng Thuận (Dissent Protocol):
 1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {REJECT, CHALLENGE}`, ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:

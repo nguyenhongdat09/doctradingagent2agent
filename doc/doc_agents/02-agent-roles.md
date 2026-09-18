@@ -30,7 +30,21 @@
 - APPROVE không `counter_evidence`; ba phải; enqueue/OrderSend.
 - **Từ chối khống (Passive Dissent):** Cấm chỉ REJECT/CHALLENGE chung chung mà không đưa ra Counter-Plan định lượng mốc giá/điều kiện chờ.
 
-## 3. Boss — Human (v1)
+## 3. Subagent C — The Scribe (Thư Ký Biên Niên Sử / Worker Subagent)
+
+### Trách nhiệm
+- **Kích hoạt One-shot:** Chỉ được Orchestrator đánh thức khi một Plan Chốt chuyển sang trạng thái `DONE` (đã khớp lệnh, đã dời SL, đã chốt bớt, hoặc cắt lỗ).
+- Sử dụng mô hình AI nhỏ, siêu rẻ và nhanh (`Gemini Flash`, `GPT-4o-mini`) để trích xuất sự thật khách quan (Ground Truth).
+- Tóm tắt diễn biến Plan thành 2-3 gạch đầu dòng trung lập (`summary_text`), ghi xuống DB `contingency_plans.summary_text`.
+- Không tham gia tranh luận hay biểu quyết lệnh, không làm ảnh hưởng đến latency của Agent A và B.
+
+### Không được
+- Tự ý biểu quyết (vote ballot), phân tích biểu đồ hay can thiệp vào quyết định của Agent A & B.
+- Đưa cảm xúc cá nhân hoặc đánh giá chủ quan vào bản tóm tắt lịch sử.
+
+---
+
+## 4. Boss — Human (v1)
 
 ### Trách nhiệm
 - `BossWake` + intent; hội thoại 3 bên; `BossACK` = xác nhận đã bàn xong (không thay ballot B).
@@ -39,20 +53,38 @@
 - `BossOverride` / ép HardValidator / OrderSend / enqueue thay A.
 - Khi B dissent → chấp nhận **DEFER**.
 
-## 4. Orchestrator + Executor
+---
+
+## 5. Kiến Trúc Mở Rộng Tương Lai (Future Extensibility)
+
+Hệ thống được thiết kế theo mô hình **Phân tầng (Tiered Architecture)** để chống xung đột khi mở rộng:
+1. **Tầng 1 — Core Decision Council (Hội đồng Quyết định):** Hiện tại gồm **Agent A** và **Agent B**. Nếu tương lai bổ sung **Agent C (Macro/Sentiment Director)** thành Agent chính thứ 3, chỉ cần đưa Agent C vào vòng biểu quyết (Consensus Quorum 100%).
+2. **Tầng 2 — Specialized Worker Subagents (Bộ Subagent việc vặt):**
+   - **Subagent C (The Scribe):** Đã hiện hữu, chuyên tóm tắt Plan khi `DONE`.
+   - *Subagent News Scanner (Dự phòng):* Quét tin tức vĩ mô, cảnh báo đỏ.
+   - *Subagent Math Calculator (Dự phòng):* Tính toán khoảng cách spacing, lot, ATR.
+   - Các Subagent này hoạt động độc lập (Plug & Play), không có quyền can thiệp vào lệnh.
+
+---
+
+## 6. Orchestrator + Executor
 
 | Thành phần | Làm | Không làm |
 |------------|-----|-----------|
-| Orchestrator | Wake, bus, session_mode, audit, HardValidator gate trước enqueue | Chọn hướng lệnh |
+| Orchestrator | Wake, bus, session_mode, audit, HardValidator gate, kích hoạt Subagent C khi Plan DONE | Chọn hướng lệnh |
 | Executor Thread | Poll PENDING → claim PROCESSING → MT5 OrderSend/Close → Archive hoặc FAILED | Sinh plan |
 
-## 5. RACI rút gọn
+---
 
-| Việc | A | B | Boss | Orch | Executor |
-|------|---|---|------|------|----------|
-| Fetch / MemoryPack | R | R | C | I | — |
-| Draft plan | R | C | C (BOSS) | I | — |
-| Ballot | C | R | I | I | — |
-| Enqueue MarketOrderInfo | R | — | — | I (gate) | — |
-| OrderSend MT5 | — | — | — | I | **R** |
-| Set wake | R | — | C | R (timer) | — |
+## 7. RACI Ma Trận Vai Trò
+
+| Việc | A (Planner) | B (Challenger) | Subagent C (Scribe) | Boss | Orch | Executor |
+|------|---|---|---|---|---|---|
+| Fetch / MemoryPack | R | R | — | C | I | — |
+| Draft plan | R | C | — | C (BOSS) | I | — |
+| Ballot (Phản biện/Biểu quyết) | C | R | — | I | I | — |
+| Duy trì Plan ACTIVE (Multi-session) | R | R | — | — | R (lockdown) | — |
+| Enqueue MarketOrderInfo | R | — | — | — | I (gate) | — |
+| OrderSend MT5 | — | — | — | — | I | **R** |
+| Summarize khi Plan DONE | — | — | **R** | — | I (trigger) | — |
+| Set wake | R | — | — | C | R (timer) | — |

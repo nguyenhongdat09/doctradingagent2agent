@@ -3,10 +3,11 @@
 Tài liệu đặc tả nghiệp vụ và kiến trúc luồng dành cho **Business Analyst (BA)** và đội ngũ phát triển (Dev / QA) trong dự án **Giao dịch Tự động hóa Agent-to-Agent (A2A)**.
 
 > 📢 **CÁC BẢN NÂNG CẤP MỚI NHẤT DÀNH CHO DEV:** 
-> - 📄 **[NANG_CAP_PLAN_LIFECYCLE_VA_TIMELINE_MEMORY.md](NANG_CAP_PLAN_LIFECYCLE_VA_TIMELINE_MEMORY.md)** *(Mới nhất - v2.2)*: Vòng đời Plan Executed, Clear Plan, Chuỗi Timeline Memory và Khung tư duy tự chủ 360° cho Agent ứng biến.
+> - 📄 **[NANG_CAP_PLAN_LIFECYCLE_VA_TIMELINE_MEMORY.md](NANG_CAP_PLAN_LIFECYCLE_VA_TIMELINE_MEMORY.md)** *(Mới nhất - v2.3)*: Vòng đời Plan ACTIVE vs DONE, Mô hình Bìa Carton (Macro Cycle), Subagent C (Scribe) và Kiến trúc Phân tầng Mở rộng.
 > - 📄 **[NANG_CAP_PLAN_TAM_CHOT_PRICE_ACTION_PRUNING.md](NANG_CAP_PLAN_TAM_CHOT_PRICE_ACTION_PRUNING.md)** *(v2.1)*: Plan Tạm vs Plan Chốt, Lực nến Price Action và Thuật toán Cắt tỉa kịch bản (Plan Pruning).
 > - 📄 **[UPGRADE_CONTINGENCY_PLAN_SPEC.md](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md)**: Tài liệu đặc tả kỹ thuật chi tiết nhất (JSON Schemas, SQL DDL, Sequence Diagram).
 > - 📄 **[TONG_HOP_THAY_DOI_NANG_CAP.md](TONG_HOP_THAY_DOI_NANG_CAP.md)** *(v2.0)*: Kiến trúc chu kỳ hai tầng (Macro/Micro Cycle).
+
 
 ---
 
