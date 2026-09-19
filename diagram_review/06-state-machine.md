@@ -32,7 +32,7 @@ Hệ thống quản lý trạng thái của mỗi cặp tiền thông qua biến
 - **Điều kiện**: $0.0 < \text{TotalLot} < 0.30 \text{ lot}$.
 - **Hành vi**:
   - Đang có một rổ lệnh nhỏ.
-  - Nếu giá đi thuận chiều $\rightarrow$ Chạm mức Take-Profit (ví dụ $+30 \text{ pips}$) $\rightarrow$ Đóng toàn bộ rổ $\rightarrow$ Về `FLAT`.
+  - Nếu giá đi thuận chiều $\rightarrow$ Đạt mức Take-Profit mục tiêu do AI hoạch định (ví dụ $+100 \text{ pips}$) HOẶC trong quá trình chạy (ví dụ mới đạt $+50 \text{ pips}$) AI nhận định thị trường cạn kiệt xung lực/không thể tới mốc TP $\rightarrow$ Kích hoạt cắt sạch rổ lệnh (`CLOSE_ALL`) để bảo toàn lãi $\rightarrow$ Về `FLAT`.
   - Nếu giá đi ngược $\rightarrow$ Scheduler kiểm tra mỗi nhịp (Wake C3). Khi khoảng cách giá thỏa mãn `Spacing` tính từ ATR $\rightarrow$ LLM cân nhắc mở thêm lệnh `DCA`.
 
 ### 2.3 RECOVERY (Chế Độ Cứu Hộ Khẩn Cấp)

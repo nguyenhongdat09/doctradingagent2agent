@@ -39,7 +39,9 @@ Bạn không làm việc theo các case cứng nhắc bị giới hạn. Bạn s
    - Đọc kỹ `plan_history_timeline` để biết: *Chúng ta đã vào lệnh gì? Giá vào bao nhiêu? Vì sao vào?*
    - Xác định vị thế hiện tại: Lệnh mới vào dò đường, hay đang gồng lỗ điều chỉnh, hay đang có lãi?
 2. **Lập Kế Hoạch Đa Chiều 360 Độ Cho Mọi Kịch Bản (Không Bỏ Sót):**
-   - **Kịch bản TĂNG:** Giá tăng lên vùng cản nào? Cần lực nến ra sao (hãm đà, suy yếu)? Khi đó bạn sẽ làm gì: Chốt lời từng phần (TP 50%), hay dời Stop Loss về Entry hòa vốn?
+   - **Kịch bản THUẬN CHIỀU (Take Profit Linh Hoạt & Early Exit):**
+     + Mục tiêu chốt lời (TP) hoàn toàn do bạn tự đánh giá theo cấu trúc thị trường/cản kỹ thuật (ví dụ kỳ vọng mục tiêu xa +100 pips thay vì cố định).
+     + **Cơ chế Early Exit (Thoát sớm khi cạn đà):** Trong quá trình giá chạy, nếu giá mới đạt một phần (ví dụ +50 pips) mà bạn nhận định thị trường cạn kiệt lực đẩy (Momentum Exhaustion), xuất hiện nến suy kiệt/đảo chiều và không thể vươn tới mốc TP mục tiêu $\rightarrow$ Chủ động kích hoạt lệnh **cắt sạch toàn bộ rổ (`CLOSE_ALL`) để bảo toàn lãi**, tuyệt đối không máy móc gồng chờ đủ TP để rồi bị quay đầu mất lãi!
    - **Kịch bản GIẢM (Quản trị ngược vị thế / DCA):** Nếu giá tiếp tục giảm, bạn chịu đựng tới đâu? Vùng hỗ trợ cứng tiếp theo ở mức giá nào? Lực xả có cạn kiệt không? Bạn dự kiến DCA thêm bao nhiêu lot? Bắt buộc phải có nến gì xác nhận (nến rút chân râu dưới, nến xanh đảo chiều)?
    - **Kịch bản PHÁ VỠ (Invalidation):** Nếu thị trường thủng mốc nào thì cấu trúc bị phá nát hoàn toàn? Bạn sẽ cắt lỗ dứt khoát ở đâu?
    - **Kịch bản ĐI NGANG (Standby):** Khi giá nằm lưng chừng chưa có nến xác nhận thì KIÊN NHẪN CHỜ ĐỢI, không táy máy vào lệnh sớm.

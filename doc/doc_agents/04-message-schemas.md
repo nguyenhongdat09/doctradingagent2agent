@@ -183,9 +183,9 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
           "HOẶC xuất hiện cụm nến đảo chiều đỏ (Bearish Engulfing)"
         ]
       },
-      "action": "TAKE_PROFIT_PARTIAL|OPEN_SELL",
-      "params": {"close_ratio": 0.5, "move_sl_to": 0.8950},
-      "rationale": "Chạm kháng cự trên kèm nến hãm lực"
+      "action": "CLOSE_ALL|TAKE_PROFIT_ALL|TAKE_PROFIT_PARTIAL|OPEN_SELL",
+      "params": {"close_ratio": 1.0, "reason": "EARLY_STALL_EXIT"},
+      "rationale": "Chạm kháng cự hoặc xuất hiện nến cạn đà/đảo chiều, chốt sạch bảo toàn lãi"
     },
     "DOWNSIDE": {
       "zone": "0.8915 - 0.8925",

@@ -91,12 +91,13 @@ Mỗi cây nến đại diện cho biến động giá trong một khoảng th�
 DCA trong trading là hành động **mở thêm lệnh cùng hướng khi giá đang đi ngược lại dự đoán ban đầu**, nhằm kéo mức giá trung bình của cả "rổ lệnh" lại gần thị trường hơn, giúp thoát lệnh có lãi sớm khi giá hồi nhẹ.
 
 ### Ví dụ bằng số học cụ thể:
-1. Bạn mở lệnh 1: **BUY 0.05 lot tại giá 0.90000**. Target chốt lời 30 pips tại `0.90300`.
-2. Giá không tăng mà giảm xuống `0.89600` (Bạn đang âm 40 pips).
+1. Bạn mở lệnh 1: **BUY 0.05 lot tại giá 0.90000**. Target chốt lời do AI tự nhận định (ví dụ kỳ vọng lên cản cứng +100 pips tại `0.91000`).
+   - *Lưu ý cơ chế Early Exit (Thoát sớm)*: Nếu giá mới tăng được +50 pips (`0.90500`) mà AI phát hiện nến suy kiệt/thị trường không thể chạy tới 100 pips, AI sẽ chủ động kích hoạt lệnh **cắt hết toàn bộ rổ (`CLOSE_ALL`) để bảo toàn lãi**, không gồng máy móc.
+2. Trường hợp giá không tăng mà giảm xuống `0.89600` (Bạn đang âm 40 pips).
 3. Hệ thống mở lệnh 2 (DCA): **BUY 0.05 lot tại giá 0.89600**.
 4. **Giá vốn trung bình mới**:
    $$\text{Giá TB} = \frac{(0.05 \times 0.90000) + (0.05 \times 0.89600)}{0.05 + 0.05} = 0.89800$$
-5. Giờ đây, chỉ cần giá hồi nhẹ lên `0.89830` (+3 pips so với giá TB) là **TOÀN BỘ RỔ LỆNH ĐÃ CÓ LÃI** và thoát an toàn, không cần đợi giá quay lại tận `0.90300`.
+5. Giờ đây, chỉ cần giá hồi nhẹ lên `0.89830` (+3 pips so với giá TB) là **TOÀN BỘ RỔ LỆNH ĐÃ CÓ LÃI** và thoát an toàn, không cần đợi giá quay lại tận vùng đỉnh ban đầu.
 
 ---
 

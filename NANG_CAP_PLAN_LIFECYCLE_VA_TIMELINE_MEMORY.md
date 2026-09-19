@@ -61,8 +61,8 @@ Plan chốt là một **Contingency Plan đa kịch bản 360 độ** (chứa nh
 - **Khi nào chuyển sang `DONE`?**
   - Khi **một trong các kịch bản hành động then chốt của Plan đã diễn ra và được thực thi xong trên thực tế**:
     + *Biến thể Vào lệnh:* Lệnh SELL 1 đã khớp thành công trên sàn $\rightarrow$ `DONE`.
-    + *Biến thể Quản trị rủi ro:* Giá chạm cản và hệ thống đã dời SL về hòa vốn (BE) thành công $\rightarrow$ `DONE`.
-    + *Biến thể Chốt lời từng phần:* Giá chạm TP1, đã chốt bớt 50% khối lượng $\rightarrow$ `DONE`.
+    + *Biến thể Chốt lời linh hoạt / Thoát sớm:* Giá chạm TP mục tiêu (ví dụ 100 pip) HOẶC mới chạy được một đoạn (ví dụ 50 pip) nhưng AI nhận định cạn kiệt đà nên cắt sạch toàn bộ lệnh (`CLOSE_ALL`) để bảo toàn lãi $\rightarrow$ `DONE` (kết thúc luôn Bìa Carton).
+    + *Biến thể Chốt lời từng phần:* Giá chạm cản ngắn hạn, đã chốt bớt 50% khối lượng $\rightarrow$ `DONE`.
     + *Biến thể Nhồi lệnh DCA:* Giá hồi về vùng hỗ trợ kèm nến hãm đà, đã khớp lệnh DCA 2 $\rightarrow$ `DONE`.
     + *Biến thể Cắt lỗ:* Giá vi phạm mốc Invalidation, đã đóng sạch lệnh bảo toàn vốn $\rightarrow$ `DONE` (kết thúc luôn Bìa Carton).
 - **Hành động ngay khi `DONE`:**

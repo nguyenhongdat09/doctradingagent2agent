@@ -149,7 +149,7 @@ Hệ thống **không hardcode mọi case cụ thể** của thị trường, m�
 1. **Nhìn nhận vị thế:** Đang giữ bao nhiêu lệnh? Giá vốn hòa vốn ở đâu? Lịch sử các plan trước đã làm gì?
 2. **Xác định bản đồ giá:** Vùng cản trên/dưới gần nhất là gì? Lực nến tiếp cận ra sao?
 3. **Vạch kịch bản 360 độ:** 
-   - Hướng thuận (Tăng): Chốt lời ở đâu, dời SL về đâu?
+   - Hướng thuận (Take Profit Linh Hoạt & Early Exit): Chốt lời ở đâu theo nhận định AI (ví dụ TP mục tiêu +100 pips)? Đặc biệt: **Nếu giá mới chạy được một đoạn (ví dụ +50 pips) mà xuất hiện nến suy kiệt/cạn đà, không thể vươn tới mốc TP mục tiêu $\rightarrow$ Kích hoạt cơ chế Early Exit cắt sạch toàn bộ rổ (`CLOSE_ALL`) để bảo toàn lợi nhuận**.
    - Hướng nghịch (Giảm): Chịu đựng tới đâu, về cản nào mới được DCA, dự kiến bao nhiêu lot kèm nến xác nhận gì?
    - Hướng sideway: Chờ đợi điều kiện gì?
    - Hướng phá vỡ (Invalidation): Cắt lỗ dứt khoát tại mốc nào?
