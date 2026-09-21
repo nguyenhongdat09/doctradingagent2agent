@@ -19,7 +19,7 @@
 // ============================================================================
 
 window.FLOW_DATA = {
-  version: 'v2.3.4',
+  version: 'v2.3.5',
   flows: [
 
     // ======================= FLOW 1: CHU KỲ WAKE & QUYẾT ĐỊNH =======================
@@ -172,7 +172,7 @@ window.FLOW_DATA = {
         { id: 'lessons', type: 'db', x: 710, y: 170, title: 'Sổ bài học (Lessons)', sub: 'bảng trong experience.db',
           desc: 'Sổ bài học — mỗi dòng tối đa 200 ký tự theo mẫu chuẩn [TRÁNH | NÊN | CẢNH BÁO] + cặp tiền + bối cảnh + điều kiện → hành động. Có ghi ai tạo (AI A / AI B / hệ thống / Boss / nhập tay / import), phạm vi áp dụng (chỉ 1 cặp / nhóm cặp / mọi cặp), và vòng đời: đang dùng → hết giá trị → lưu trữ.',
           docs: ['doc/doc_experience/01-experience-db-spec.md'], decs: ['DEC-17'] },
-        { id: 'backend', type: 'engine', x: 710, y: 420, title: 'Bộ lọc kinh nghiệm', sub: 'phía sau hàm get_memory_pack()',
+        { id: 'backend', type: 'engine', x: 710, y: 480, title: 'Bộ lọc kinh nghiệm', sub: 'phía sau hàm get_memory_pack()',
           desc: 'Bộ lọc kinh nghiệm phía sau hàm get_memory_pack(). Bản v1 (đang dùng): SQL lọc sơ bộ theo cặp tiền + bối cảnh + hành động dự kiến, rồi chấm điểm theo công thức (mức nghiêm trọng nặng nhất, rồi số lần lặp, độ liên quan, độ mới) → lấy 6 bài tốt nhất. Bản v2 (tương lai): SQL lấy ~20 ứng viên → model nhỏ (vd Jev) chấm lại độ liên quan → lấy top K. Quy tắc an toàn: model chấm sập → tự quay về v1 — kinh nghiệm chỉ là tư vấn nên KHÔNG ĐƯỢC đóng băng hệ thống vì nó.',
           docs: ['doc/doc_experience/02-map-to-agents.md'], decs: ['DEC-18'] },
         { id: 'cache', type: 'db', x: 1050, y: 300, title: 'Bộ nhớ đệm (MemoryCache)', sub: 'giữ kết quả 1 giờ',
@@ -190,8 +190,8 @@ window.FLOW_DATA = {
         { id: 'profiles', type: 'db', x: 710, y: 40, title: 'Hồ sơ cặp tiền (PairProfiles)', sub: 'đặc tính 4 cặp',
           desc: 'Hồ sơ đặc tính của 4 cặp tiền — ghi ngắn (≤300 ký tự/cặp) cách giá từng cặp «cư xử»: cặp nào hay đi ngang, cặp nào nhạy tin, biên độ thường ngày... Luôn nằm sẵn trong Tầng 1 của gói kinh nghiệm để AI biết đang chơi với đối thủ nào.',
           docs: ['doc/doc_experience/01-experience-db-spec.md'], decs: [] },
-        { id: 'jev', type: 'external', x: 1050, y: 540, title: 'Model Jev chấm lại (v2 — tương lai)', sub: 'xếp hạng lại ứng viên theo ngữ nghĩa',
-          desc: 'Bản nâng cấp TƯƠNG LAI của bộ lọc — chưa triển khai. Thay vì chỉ tin công thức chấm điểm cứng, SQL vẫn lọc sơ bộ ~20 bài học ứng viên rồi gửi cho model Jev (TypeSafe) chấm độ liên quan theo NGỮ NGHĨA với tình huống hiện tại → xếp hạng lại, lấy top K. Ưu điểm: bắt được bài học liên quan về ý nghĩa dù không khớp từ khóa cứng. An toàn: Jev sập hoặc timeout → tự quay về công thức v1 (fail-open) — kinh nghiệm chỉ là tư vấn nên KHÔNG ĐƯỢC đóng băng hệ thống vì nó.',
+        { id: 'jev', type: 'external', x: 1050, y: 480, title: 'Model Jev chấm lại (v2 — tương lai)', sub: 'xếp hạng lại ứng viên theo ngữ nghĩa',
+          desc: 'Bản nâng cấp TƯƠNG LAI — nằm NGAY TRÊN đường truy vấn của pipeline v2: Bộ lọc → Jev → Bộ nhớ đệm → Gói kinh nghiệm (chưa triển khai). Thay vì chỉ tin công thức chấm điểm cứng, SQL vẫn lọc sơ bộ ~20 bài học ứng viên rồi gửi cho model Jev (TypeSafe) chấm độ liên quan theo NGỮ NGHĨA với tình huống hiện tại → xếp hạng lại, lấy top K. Ưu điểm: bắt được bài học liên quan về ý nghĩa dù không khớp từ khóa cứng. An toàn: Jev sập hoặc timeout → tự quay về công thức v1 (fail-open, nhánh nét đứt) — kinh nghiệm chỉ là tư vấn nên KHÔNG ĐƯỢC đóng băng hệ thống vì nó.',
           docs: ['doc/doc_experience/02-map-to-agents.md'], decs: ['DEC-18'] }
       ],
       edges: [
@@ -201,8 +201,9 @@ window.FLOW_DATA = {
         { from: 'writer', to: 'cache', label: 'báo làm mới', dashed: true },
         { from: 'lessons', to: 'backend', label: 'bài học ứng viên' },
         { from: 'profiles', to: 'backend', label: 'hồ sơ cặp (tầng 1)', dashed: true },
-        { from: 'backend', to: 'cache', label: 'chưa có → dựng gói' },
-        { from: 'backend', to: 'jev', label: 'v2: gửi ~20 ứng viên → nhận xếp hạng (fail-open về v1)', dashed: true },
+        { from: 'backend', to: 'jev', label: 'v2: gửi ~20 ứng viên' },
+        { from: 'jev', to: 'cache', label: 'trả top-K đã xếp hạng' },
+        { from: 'backend', to: 'cache', label: 'v1 & Jev lỗi → chấm công thức trực tiếp (fail-open)', dashed: true },
         { from: 'cache', to: 'pack', label: 'trả gói kinh nghiệm' },
         { from: 'pack', to: 'agents', label: 'chích vào prompt' },
         { from: 'agents', to: 'feedback', label: 'chấm điểm sau đóng lệnh', dashed: true },
