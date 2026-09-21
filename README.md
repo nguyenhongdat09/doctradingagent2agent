@@ -14,6 +14,7 @@ Tài liệu đặc tả nghiệp vụ và kiến trúc luồng dành cho **Busin
 ## � Flow Studio — Sơ Đồ Quy Trình Kiểu n8n ([`flow_studio/index.html`](flow_studio/index.html))
 
 **Công cụ xem & chỉnh sửa quy trình vận hành v2.3 theo dạng node-based (giống n8n):**
+- ✅ Tab 0 **Bản đồ TỔNG HỢP**: toàn bộ ~60 bước của 7 luồng trên cùng 1 canvas, chia theo 7 vùng chức năng + các mũi tên nét đứt liên kết chéo giữa hệ con. Tab này **tự sinh** từ các tab chi tiết qua [`flow_studio/overview-builder.js`](flow_studio/overview-builder.js) — sửa tab chi tiết là bản đồ tổng tự cập nhật.
 - ✅ 7 luồng nghiệp vụ chi tiết: Chu kỳ Wake & Quyết định, Vòng đời Plan, Bộ nhớ Kinh nghiệm, State Machine, FREEZE/Reconcile, Boss Channel, Đa tiến trình.
 - ✅ **Hover node** → tooltip tóm tắt; **Click node** → panel chi tiết kèm link tới file doc liên quan + tham chiếu DEC/ADR.
 - ✅ **Chế độ Sửa:** kéo-thả node, sửa nội dung/nhãn edge, thêm-xóa node/edge → **Xuất `flows-data.js`** ghi đè file gốc để lưu vĩnh viễn (dữ liệu tách riêng trong [`flow_studio/flows-data.js`](flow_studio/flows-data.js) — dễ sửa tay khi nâng cấp doc).
