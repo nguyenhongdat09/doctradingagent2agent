@@ -14,6 +14,7 @@
     2. `MemoryCache`: Lưu trữ chuỗi text MemoryPack đã render sẵn theo cache key `<symbol>|<context_type>|<action_type>`.
     3. `PairProfiles`: Lưu tóm tắt đặc tính 4 cặp tiền (`AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`).
     4. `LessonFeedback`: Ghi nhận hiệu quả bài học sau mỗi lệnh đóng (`WIN`, `LOSS`, `FLAT`, `NA`).
+  - **Lưu ý schema (DEC-17):** `Lessons.src` CHECK = `('agent_a','agent_b','system','boss','manual','import')`, `DEFAULT 'system'` — không dùng `'agent'` (lỗi DDL đã sửa trong spec). `scope='group'` phải resolve qua registry nhóm cặp trong `symbols.yaml` (xem §Module 2.3).
 
 ### Module 2.2: Thuật Toán Chấm Điểm & Lọc Bài Học (`src/experience/scoring.py`)
 - **Nhiệm vụ:**
@@ -28,13 +29,22 @@
 
 ### Module 2.3: MemoryPack Builder 2 Tầng (`src/experience/memory_pack_builder.py`)
 - **Nhiệm vụ:**
-  - Cài đặt hàm `get_memory_pack(symbol: str, context_type: str, action_type: str) -> str`:
+  - Cài đặt `get_memory_pack()` như **interface trừu tượng** (DEC-18) — caller không quan tâm backend:
+    ```python
+    class MemoryRetrievalBackend(Protocol):
+        def retrieve(self, symbol: str, context_type: str, action_type: str,
+                     market_state: MarketSnapshot | None = None) -> list[LessonCandidate]: ...
+    def get_memory_pack(symbol, context_type, action_type, backend=None) -> str: ...
+    ```
+    - **Backend v1 (mặc định, deterministic):** SQL prefilter + formula scoring (Module 2.2) — luôn khả dụng, không dependency ngoài.
+    - **Backend v2 (tương lai, tùy chọn):** SQL prefilter (top ~20 candidates) → **external structured judge (ví dụ Jev)** rerank theo ngữ nghĩa → top-K. Rule bắt buộc: **fail-open** — judge timeout/sập → tự động rớt về backend v1, **không** được phép kích hoạt `SYSTEM_FREEZE` (memory retrieval là advisory). Ghi `retrieval_score`/`retrieval_rank` vào `LessonFeedback` để đo chất lượng reranker sau này.
+  - Pipeline v1:
     1. **Kiểm tra Cache:** Nếu có trong `MemoryCache` và chưa hết hạn TTL ($3600\text{s}$) $\rightarrow$ Trả về ngay lập tức ($O(1)$ query).
     2. **Tầng 1 (Permanent / Profile & Evergreen $\le 150$ tokens):**
        - Lấy Profile ngắn gọn từ `PairProfiles` ($\le 300$ ký tự).
        - Lấy tối đa 2 bài học cốt lõi có `Severity = 5` (Evergreen rules).
     3. **Tầng 2 (Dynamic Ranked Lessons $\le 350$ tokens):**
-       - Lọc bài học theo `symbol`/`group`/`all` và `context_type`/`action_type` phù hợp.
+       - Lọc bài học theo `symbol`/`group`/`all` và `context_type`/`action_type` phù hợp (`scope='group'` resolve qua registry nhóm cặp — vd `AUD*` hay `*CAD*` — khai báo trong `symbols.yaml`, xem `doc_experience/01`).
        - Tính Score cho từng bài học và chọn **Top 6 bài học** có điểm cao nhất.
     4. **Render & Kiểm Soát Token:** Gộp Tầng 1 và Tầng 2, đảm bảo tổng độ dài $\le 500$ tokens.
     5. **Cập nhật Cache:** Lưu chuỗi kết xuất vào bảng `MemoryCache`.
@@ -42,6 +52,7 @@
 ### Module 2.4: LessonWriter & Deduplication Engine (`src/experience/lesson_writer.py`)
 - **Nhiệm vụ:**
   - Đảm bảo cơ chế **Single-Writer**: Chỉ một tiến trình/thread duy nhất có quyền ghi vào bảng `Lessons` để tránh xung đột SQLite.
+  - **Write path rõ ràng (DEC-18):** Agent A/B **không ghi trực tiếp** — chúng xuất `lessons_proposed[]` trong `UnifiedContingencyPlan`/`Ballot` output (schema tại `doc_agents/04-message-schemas.md`). Orchestrator trích field này sau consensus và gọi `lesson_writer.record_lesson(candidate, caller='consensus')`. Boss/manual proposals đi cùng cửa này với `caller='boss'|'manual'`.
   - **Deduplication:**
     - Tính mã băm định danh:
       $$\text{Hash} = \text{SHA256}(\text{symbol} + \text{context\_type} + \text{action\_type} + \text{lesson\_type} + \text{trigger\_cond})$$
@@ -60,6 +71,8 @@
 - [ ] **MemoryPack Builder:** Render chuỗi text chuẩn Markdown, tổng token ước lượng luôn $\le 500$ tokens.
 - [ ] **Cache Mechanism:** Test lần gọi thứ 2 trả về kết quả từ `MemoryCache` mà không cần query lại bảng `Lessons`.
 - [ ] **Deduplication & Invalidation:** Thử ghi 2 bài học trùng điều kiện $\rightarrow$ DB chỉ tăng `occurrence_count`, không sinh dòng mới, đồng thời cache cũ bị xóa.
+- [ ] **Write-path contract:** Mock `UnifiedContingencyPlan` có `lessons_proposed[]` $\rightarrow$ Orchestrator gọi `LessonWriter` đúng, field mapping khớp schema.
+- [ ] **Backend abstraction:** `get_memory_pack()` gọi qua interface; test fail-open: backend judge giả lập sập $\rightarrow$ tự động về v1 deterministic, không raise, không FREEZE (DEC-18).
 
 ---
 

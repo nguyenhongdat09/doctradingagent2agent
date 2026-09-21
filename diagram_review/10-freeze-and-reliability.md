@@ -1,6 +1,6 @@
 # 10 - CHẾ ĐỘ ĐÓNG BĂNG HỆ THỐNG VÀ ĐỘ TIN CẬY (FREEZE & RELIABILITY)
 
-> **File sơ đồ Mermaid tương ứng**: [10-freeze-and-reliability.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/10-freeze-and-reliability.mmd)
+> **File sơ đồ Mermaid tương ứng**: [10-freeze-and-reliability.mmd](10-freeze-and-reliability.mmd)
 
 ---
 

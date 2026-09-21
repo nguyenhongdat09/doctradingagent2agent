@@ -19,6 +19,8 @@ Hệ thống hiện có 2 cơ chế liên quan Boss:
 
 Thêm cơ chế **Uncertainty Escalation** — Agent A hoặc B tự phát hiện mơ hồ → gửi Telegram → đợi Boss reply → tiếp tục xử lý.
 
+> **Ngữ nghĩa "đợi" (DEC-15):** escalation là **async** — ticket được park (`status=WAITING`), scheduler **không block**: C0 H1-close và C3 wakes khác vẫn chạy bình thường (nhưng không action mới cần consensus được enqueue trong khi ticket liên quan đang chờ — trừ INVALIDATION deterministic theo DEC-10). Khi Boss reply hoặc timeout → inject response vào cycle kế tiếp của agent đó.
+
 ### 1.3 Triết lý
 
 - **Mơ hồ thì hỏi** — không giới hạn tần suất, đây là giá trị cốt lõi
@@ -58,7 +60,7 @@ sequenceDiagram
     participant A as Agent A (Planner)
     participant B as Agent B (Challenger)
     participant Orch as Orchestrator
-    participant DB as escalation_tickets
+    participant DB as EscalationTickets
     participant TG as Telegram Bot
     participant Boss as Boss
 
@@ -87,7 +89,7 @@ sequenceDiagram
     participant A as Agent A (Planner)
     participant B as Agent B (Challenger)
     participant Orch as Orchestrator
-    participant DB as escalation_tickets
+    participant DB as EscalationTickets
     participant TG as Telegram Bot
     participant Boss as Boss
 
@@ -116,7 +118,7 @@ sequenceDiagram
 sequenceDiagram
     participant Agent as Agent A hoặc B
     participant Orch as Orchestrator
-    participant DB as escalation_tickets
+    participant DB as EscalationTickets
     participant TG as Telegram Bot
     participant Boss as Boss
 
@@ -169,9 +171,9 @@ sequenceDiagram
     Note over A,B: Consensus bình thường
 ```
 
-## 5. DB Schema — `escalation_tickets`
+## 5. DB Schema — `EscalationTickets`
 
-Bảng thứ 10 trong `dca_<symbol>.db`. Xem chi tiết tại [10-sqlite-design.md](../doc_phuong_phap/10-sqlite-design.md).
+Bảng thứ 10 trong `dca_<symbol>.db` (naming PascalCase theo convention — xem [10-sqlite-design.md](../doc_phuong_phap/10-sqlite-design.md) §2.9).
 
 ### Lifecycle
 
@@ -184,7 +186,7 @@ WAITING → SELF_RESOLVED  (Timeout 30 phút → Agent tự quyết)
 ### Schema tóm tắt
 
 ```sql
-CREATE TABLE escalation_tickets (
+CREATE TABLE EscalationTickets (
     ticket_id         TEXT PRIMARY KEY,
     symbol            TEXT NOT NULL,
     source_agent      TEXT NOT NULL CHECK(source_agent IN ('A', 'B')),
@@ -295,7 +297,7 @@ cao. Boss cho ý kiến: APPROVE DCA hay CHALLENGE để WAIT?"
 ## 10. Audit Trail
 
 Mọi escalation được ghi đầy đủ vào:
-- **`escalation_tickets`** table: ticket_id, timestamps, status, response
+- **`EscalationTickets`** table: ticket_id, timestamps, status, response
 - **`audit_log`**: event_type = `ESCALATION_SENT`, `BOSS_REPLIED`, `SELF_RESOLVED`, `LATE_REPLY`
 
 ## 11. Liên kết

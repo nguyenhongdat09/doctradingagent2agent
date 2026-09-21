@@ -1,5 +1,8 @@
 # GỬI CHO GEMINI — FIX NHANH 3 ĐIỂM TRONG diagram_review
 
+> ✅ **TRẠNG THÁI (v2.3): ĐÃ ÁP DỤNG.** Các fix 1–3 + mục rà soát đã được vá trong các file `.md`/`.mmd` tương ứng. File này giữ lại làm work-note lịch sử.
+> **Delta còn lại sau đợt chuẩn hóa v2.3:** số bảng local = **14** (không còn 9 — thêm `MarketSnapshots` + 3 bảng plan v2.x); diagram chưa vẽ `plan_gate.py`/`plan_summarizer.py`/vòng đời PROVISIONAL→COMMITTED. Nếu cập nhật diagram, tham chiếu `doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md`.
+
 > Copy TOÀN BỘ nội dung từ dòng `---` đến hết, gửi cho Gemini.
 
 ---

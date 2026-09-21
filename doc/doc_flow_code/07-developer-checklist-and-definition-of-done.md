@@ -7,7 +7,7 @@
 ## 📋 1. Master Checklist Theo Từng Phase
 
 ### Phase 1: Nền Tảng Cơ Sở (Database, MT5, Engine Mắt, Executor)
-- [ ] Khởi tạo 4 file DB riêng cho 4 cặp + cấu hình PRAGMA WAL, busy_timeout=5000, synchronous=FULL, đủ 9 bảng (kèm `LLMRuns`).
+- [ ] Khởi tạo 4 file DB riêng cho 4 cặp + cấu hình PRAGMA WAL, busy_timeout=5000, synchronous=FULL, đủ **14 bảng** (kèm `LLMRuns`, `EscalationTickets`, `MarketSnapshots`, `macro_cycles`, `micro_cycles`, `contingency_plans` + unique index 1-ACTIVE-plan/macro).
 - [ ] Hoàn thành wrapper `MetaTrader5`, đảm bảo chỉ đọc nến đã đóng (`shift >= 1`), không repaint, retry nhẹ khi requote, comment đúng format.
 - [ ] Hoàn thành `StructureEngine` tách 3 submodules: PivotDetector, StructureFeatures, ContextClassifier (Hysteresis).
 - [ ] Hoàn thành `SignalEngine` tách 2 submodules: StrengthScore (4 thành phần), Disqualifiers.
@@ -25,11 +25,12 @@
 
 ### Phase 3: Hệ Thống Multi-Agent & Đồng Thuận (A2A & Boss)
 - [ ] Hoàn thành `LLMProvider` layer: DeepSeek, OpenAI, Anthropic, bóc tách JSON Pydantic, ghi log bắt buộc vào bảng `LLMRuns`.
-- [ ] Hoàn thành `AgentAPlanner`: System prompt chuẩn, luận giải như trader thực thụ, đề xuất `TradePlan`.
-- [ ] Hoàn thành `AgentBChallenger`: System prompt phản biện độc lập, bắt lỗi AVOID, bắt buộc có `counter_evidence`.
-- [ ] Hoàn thành `ConsensusEngine`: Vòng tranh luận tối đa 2 vòng, chỉ enqueue khi có `B.APPROVE + HardValidator.PASS`.
+- [ ] Hoàn thành `AgentAPlanner`: System prompt chuẩn (planning + supervisor mode), đề xuất `TradePlan` **kèm `UnifiedContingencyPlan` 4 nhánh có `candle_predicates` + `lessons_proposed[]`**.
+- [ ] Hoàn thành `AgentBChallenger`: System prompt phản biện độc lập, bắt lỗi AVOID, bắt buộc có `counter_evidence` khi APPROVE và `counter_plan` khi dissent.
+- [ ] Hoàn thành `ConsensusEngine`: Vòng tranh luận tối đa `InpMaxDebateRounds` vòng (mặc định 2, đọc từ `08-parameters`), chỉ enqueue khi có `B.APPROVE + HardValidator.PASS`; mọi cycle kết thúc có Plan COMMITTED (fallback kế thừa INVALIDATION, DEC-13).
+- [ ] Hoàn thành `PlanSummarizer` worker: one-shot khi plan DONE → `summary_text`; fail → fallback `execution_notes`.
 - [ ] Hoàn thành `BossChannel`: Tiếp nhận `BossWake`, thảo luận 3 bên tối đa 12 lượt, tuyệt đối không cho phép BossOverride.
-- [ ] Vượt qua $10/10$ Scenarios kiểm thử quyết định của LLM trong `tests/scenarios/test_llm_decisions.py`.
+- [ ] Vượt qua $11/11$ Scenarios kiểm thử quyết định của LLM trong `tests/scenarios/test_llm_decisions.py` (catalog chuẩn ở `04-phase-3` §3).
 
 ### Phase 4: Bộ Điều Phối & Độ Tin Cậy Vận Hành (Orchestrator & Reliability)
 - [ ] Hoàn thành `SingleSymbolRunner`: 1 process chạy 1 symbol độc lập (ADR-001) qua CLI `--symbol <SYM>`.
@@ -37,8 +38,9 @@
 - [ ] Hoàn thành `DCA Timing`: Tại mỗi lần wake C3, nếu `spacing_met == true` $\rightarrow$ Agent A+B đánh giá và ra quyết định DCA ngay giữa nến.
 - [ ] Hoàn thành `SYSTEM_FREEZE`: Khi LLM sập $\rightarrow$ Tự động đóng băng toàn bộ, phát `ALERT_LLM_OUTAGE`, giữ nguyên lệnh, không auto-degrade.
 - [ ] Hoàn thành `Auto-Resume & Light Reconcile`: Khi LLM phục hồi $\rightarrow$ Tự động resume kèm so khớp trạng thái MT5 vs DB.
-- [ ] Hoàn thành `StartupReconcile`: Khởi động lại hệ thống sau crash $\rightarrow$ Tự động đồng bộ trạng thái từ MT5, dọn dẹp hàng đợi rác.
+- [ ] Hoàn thành `StartupReconcile`: Khởi động lại hệ thống sau crash $\rightarrow$ Tự động đồng bộ trạng thái từ MT5, dọn dẹp hàng đợi rác, **restore Active Plan + plan_history_summaries**.
 - [ ] Hoàn thành `Monitoring`: Ghi nhận Heartbeat, cảnh báo MT5 disconnect, cảnh báo Queue backlog $> 5$ lệnh.
+- [ ] Hoàn thành `PreTriggerFilter`/`PlanGate` (v2.x): INVALIDATION deterministic auto-execute kể cả khi FREEZE (DEC-10); UPSIDE/DOWNSIDE → fast-consensus; STANDBY không gọi LLM; `prune_hint` flag-only (DEC-14); plan TTL replan (DEC-16); dedupe C0-only + `trigger_event_id` idempotent (DEC-12).
 
 ### Phase 5: E2E Replay, Paper Trading Demo & Triển Khai
 - [ ] Chạy bộ công cụ **Historical Replay Harness** qua 3 tháng dữ liệu lịch sử $\rightarrow$ Đạt $0$ lỗi vi phạm phương pháp.
@@ -92,6 +94,8 @@ Bảng kiểm soát chất lượng tài liệu trước khi bắt đầu code:
 | 1 | **Mô hình Per-Symbol (ADR-001):** Không còn bất kỳ file nào mô tả "1 process chạy tuần tự 4 cặp". Toàn bộ tài liệu thống nhất 1 Symbol = 1 Process độc lập. | [x] Đã khớp |
 | 2 | **Đồng nhất thuật ngữ & Schema:** `doc_flow_code` khớp hoàn toàn với `doc_phuong_phap`, `doc_agents`, `doc_experience` (tên module, models, enums, submodules). | [x] Đã khớp |
 | 3 | **Diagrams chuẩn ALL-LLM:** Cả 7 diagrams (`D01`, `D02`, `D03`, `D08`, `A01`, `A03`, `A04`) đều vẽ đúng quy trình A+B consensus, không còn nhánh DCA tự động kiểu EA. | [x] Đã khớp |
-| 4 | **Số bảng Database SQLite:** Thống nhất chính xác 9 bảng cho instance database (đã có đầy đủ bảng `LLMRuns` đo chi phí token). | [x] Đã khớp |
+| 4 | **Số bảng Database SQLite:** Thống nhất chính xác **14 bảng** cho instance database (10 vận hành + `MarketSnapshots` + 3 bảng v2.x `macro_cycles`/`micro_cycles`/`contingency_plans`). | [x] Đã khớp (v2.3) |
 | 5 | **Timing DCA & Scheduler:** Ghi rõ C0 bắt buộc (H1 close + 1-2s buffer) và C3 dynamic wake xét DCA ngay khi `spacing_met` (DEC-09). | [x] Đã khớp |
-| 6 | **SYSTEM_FREEZE & Concurrency:** Ghi rõ cơ chế đóng băng khi LLM sập (không auto-degrade) + Auto-resume Light Reconcile + Single-writer cho `experience.db`. | [x] Đã khớp |
+| 6 | **SYSTEM_FREEZE & Concurrency:** Ghi rõ cơ chế đóng băng khi LLM sập (không auto-degrade) + Auto-resume Light Reconcile + Single-writer cho `experience.db`. **Ngoại lệ:** INVALIDATION của Plan Chốt vẫn auto-exec khi FREEZE (DEC-10). | [x] Đã khớp (v2.3) |
+| 7 | **v2.x Plan Parity:** `doc_flow_code` mô tả đủ ContingencyPlan lifecycle (PROVISIONAL→COMMITTED; ACTIVE/DONE/SUPERSEDED/CANCELLED), PlanSummarizer, PreTriggerFilter, DeltaSnapshot — khớp `UPGRADE_CONTINGENCY_PLAN_SPEC.md` + DEC-10..18. | [x] Đã khớp (v2.3) |
+| 8 | **Enum thống nhất (DEC-17):** `plan_status = ACTIVE|DONE|SUPERSEDED|CANCELLED`, `Ballot.decision = APPROVE|CHALLENGE|VETO`, `action_type = ENTRY|DCA|RECOVERY_DCA|PAYOFF_REDUCE|CLOSE_ALL|PARTIAL_CLOSE` ở mọi file. | [x] Đã khớp (v2.3) |

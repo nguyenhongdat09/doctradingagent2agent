@@ -1,6 +1,6 @@
 # 04 - BỘ NÃO QUYẾT ĐỊNH "ALL-LLM" & CONSENSUS PROTOCOL
 
-> **File sơ đồ Mermaid tương ứng**: [04-brain-agents.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/04-brain-agents.mmd)
+> **File sơ đồ Mermaid tương ứng**: [04-brain-agents.mmd](04-brain-agents.mmd)
 
 ---
 

@@ -45,7 +45,7 @@
 | C1 FLAT ∧ ElapsedInH1≥30m | now+30m |
 | C2 FLAT ∧ ElapsedInH1&lt;30m | H1_open+30m |
 | C3 OPEN | A dynamic ∈ [WakeMin, WakeMax] |
-| C4 | Debate trong cycle (≤2) |
+| C4 | Debate trong cycle (≤`InpMaxDebateRounds`, mặc định 2) |
 
 ## 6. HardValidator
 
@@ -70,7 +70,7 @@ FAIL → không enqueue. Gồm 5 checks (matrix, spacing/ladder, RECOVERY no rev
 | Decision | Ý nghĩa | Ghi chú |
 |----------|---------|---------|
 | `APPROVE` | B đồng ý — **BẮT BUỘC** có `counter_evidence` | Approve trống = `INVALID` |
-| `CHALLENGE` | B yêu cầu A sửa — nêu `requested_changes` | Tối đa 2 vòng/cycle |
+| `CHALLENGE` | B yêu cầu A sửa — nêu `requested_changes` | Tối đa `InpMaxDebateRounds` vòng/cycle (mặc định 2) |
 | `VETO` | B từ chối — rủi ro nghiêm trọng → DEFER | A không enqueue |
 | `INVALID` | Ballot không đủ field / approve trống | System tự đánh dấu |
 

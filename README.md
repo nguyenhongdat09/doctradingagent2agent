@@ -11,19 +11,37 @@ Tài liệu đặc tả nghiệp vụ và kiến trúc luồng dành cho **Busin
 
 ---
 
-## 🖥️ Công Cụ Trực Quan Hóa Tương Tác ([`index.html`](file:///d:/TradingAgents/PlanToCode/index.html))
+## � Flow Studio — Sơ Đồ Quy Trình Kiểu n8n ([`flow_studio/index.html`](flow_studio/index.html))
 
-Dự án đã tích hợp sẵn công cụ **A2A Diagram Studio** (file [`index.html`](file:///d:/TradingAgents/PlanToCode/index.html)):
+**Công cụ xem & chỉnh sửa quy trình vận hành v2.3 theo dạng node-based (giống n8n):**
+- ✅ 7 luồng nghiệp vụ chi tiết: Chu kỳ Wake & Quyết định, Vòng đời Plan, Bộ nhớ Kinh nghiệm, State Machine, FREEZE/Reconcile, Boss Channel, Đa tiến trình.
+- ✅ **Hover node** → tooltip tóm tắt; **Click node** → panel chi tiết kèm link tới file doc liên quan + tham chiếu DEC/ADR.
+- ✅ **Chế độ Sửa:** kéo-thả node, sửa nội dung/nhãn edge, thêm-xóa node/edge → **Xuất `flows-data.js`** ghi đè file gốc để lưu vĩnh viễn (dữ liệu tách riêng trong [`flow_studio/flows-data.js`](flow_studio/flows-data.js) — dễ sửa tay khi nâng cấp doc).
+- ✅ Pan/zoom canvas, legend phân loại node (Engine/Agent/DB/Executor/...), chạy offline (không cần CDN). Toàn bộ tool gọn trong folder [`flow_studio/`](flow_studio/).
+
+---
+
+## �🖥️ Công Cụ Trực Quan Hóa Tương Tác ([`index.html`](index.html))
+
+Dự án đã tích hợp sẵn công cụ **A2A Diagram Studio** (file [`index.html`](index.html)):
 - ✅ **Xem sẵn 4 loại biểu đồ nghiệp vụ 100% Tiếng Việt** (Tuần tự, Kiến trúc, Vòng đời lệnh, Cây quyết định rủi ro).
 - ✅ **Trực tiếp chỉnh sửa (Live Edit)** mã Mermaid và tự động cập nhật biểu đồ.
 - ✅ **Phóng to / Thu nhỏ / Kéo thả (Zoom & Pan)** mượt mà trên canvas.
 - ✅ **Xuất ảnh chất lượng cao (Export PNG / SVG)** hoặc sao chép mã Mermaid để chèn vào tài liệu BRD / SRS, Jira hoặc Confluence.
 
-> 💡 **Cách sử dụng:** Nhấp đúp chuột vào file [`index.html`](file:///d:/TradingAgents/PlanToCode/index.html) để mở trực tiếp trên trình duyệt web (Chrome, Edge, Firefox, Cốc Cốc).
+> 💡 **Cách sử dụng:** Nhấp đúp chuột vào file [`index.html`](index.html) để mở trực tiếp trên trình duyệt web (Chrome, Edge, Firefox, Cốc Cốc).
 
 ---
 
-## 1. Biểu Đồ Tuần Tự: Luồng Giao Tiếp Nghiệp Vụ A2A (Sequence Diagram)
+> ⚠️ **GHI CHÚ PHIÊN BẢN (v2.3):** Các mục 1–5 bên dưới là **biểu đồ BA tham khảo từ kiến trúc v0.x** (mô hình MDA → SA → RA → EA, ví dụ SMA crossover / BTC-USDT). Chúng **không phải** kiến trúc hiện hành.
+>
+> **Kiến trúc chuẩn hiện nay (v2.x):** Engine (mắt, deterministic) → **Agent A (Planner)** → **Agent B (Challenger)** → Consensus → `HardValidator` → ExecutionQueue → **Executor** (duy nhất chạm MT5). Kế hoạch là `UnifiedContingencyPlan` 4 nhánh (UPSIDE/DOWNSIDE/INVALIDATION/STANDBY) với vòng đời PROVISIONAL→COMMITTED→ACTIVE→DONE/SUPERSEDED.
+>
+> 📌 **Nguồn sự thật:** [`doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md`](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md) + [`doc/ERRATA.md`](doc/ERRATA.md) (DEC-01..18) + [`doc/doc_agents/`](doc/doc_agents/) + [`doc/doc_phuong_phap/`](doc/doc_phuong_phap/) + [`doc/doc_flow_code/`](doc/doc_flow_code/).
+
+---
+
+## 1. Biểu Đồ Tuần Tự: Luồng Giao Tiếp Nghiệp Vụ A2A (Sequence Diagram) — *Legacy v0.x*
 
 ```mermaid
 sequenceDiagram

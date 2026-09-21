@@ -67,11 +67,13 @@ strength_final ≥ 0.6           → đủ vào Decision Matrix
 ```
 Python Instance / symbol
   Eyes (Structure + StrengthScore) → Snapshot
-  Agents A/B (+ MemoryPack) → HardValidator
+  [v2.x] Active Plan (COMMITTED) + DeltaMarketSnapshot → Pre-Trigger check
+  Agents A/B (+ MemoryPack) → Consensus / Fast-Consensus → HardValidator
   → INSERT MarketOrderInfo PENDING
   → Executor Thread → MT5
-  → PairState / Audit / Experience feedback
+  → PairState / Audit / Experience feedback / PlanSummarizer khi plan DONE
 ```
+*(Từ kiến trúc v2.x, chu kỳ thường chạy trên Active Plan + Delta — xem `../UPGRADE_CONTINGENCY_PLAN_SPEC.md`)*
 
 Chi tiết: [11-python-engine-notes.md](11-python-engine-notes.md), [10-sqlite-design.md](10-sqlite-design.md).
 
@@ -86,7 +88,7 @@ Chi tiết: [11-python-engine-notes.md](11-python-engine-notes.md), [10-sqlite-d
 
 1. 4 cặp cố định.  
 2. D1+H1 only.  
-3. Quyết định nghiệp vụ neo H1 close (không repaint).  
+3. Quyết định nghiệp vụ neo H1 close (không repaint) — **ngoại lệ:** DCA xét tại mọi wake C3 intra-bar (DEC-09); trigger `INVALIDATION` của Plan Chốt chạy deterministic ngay khi khớp, kể cả giữa nến (DEC-10).  
 4. Mỗi cặp 1 hướng.  
 5. Không max-DD stop.  
 6. Kill-switch thủ công + clear lệnh.  

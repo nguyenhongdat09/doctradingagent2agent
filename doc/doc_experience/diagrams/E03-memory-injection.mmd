@@ -5,6 +5,7 @@ sequenceDiagram
     participant S as Scheduler
     participant E as Eye Engine (Python)
     participant Exp as Experience DB (experience.db)
+    participant J as External Judge v2 (Jev, tùy chọn)
     participant A as Agent A (Planner)
     participant B as Agent B (Challenger)
     participant V as HardValidator
@@ -16,6 +17,14 @@ sequenceDiagram
     par Nạp Market Snapshot & Memory Pack
         E->>A: get_market_snapshot()
         E->>B: get_market_snapshot()
+        Exp->>Exp: SQL prefilter ~20 ứng viên
+        alt v1 (mặc định): công thức Severity^2 x ln(occ) x Relevance x Decay
+            Note over Exp: Không gọi service ngoài
+        else v2 (tương lai, tùy chọn): Jev rerank ngữ nghĩa
+            Exp->>J: Chấm độ liên quan từng lesson với state hiện tại
+            J-->>Exp: Điểm xác suất cả batch -> lấy top-K
+            Note over Exp,J: Jev timeout/lỗi -> fail-open về v1, không FREEZE
+        end
         Exp->>A: get_memory_pack(symbol, context, action) [<= 500 tokens]
         Exp->>B: get_memory_pack(symbol, context, action) [<= 500 tokens]
     end
@@ -27,7 +36,7 @@ sequenceDiagram
     
     alt Agent A vi phạm bài học AVOID nghiêm trọng
         B-->>A: ReviewBallot(REVISE, dissent_points="Vi phạm Lesson #X")
-        Note over A: Agent A điều chỉnh TradePlan (Tối đa 2 vòng)
+        Note over A: Agent A điều chỉnh TradePlan (Tối đa InpMaxDebateRounds vòng)
     else Hợp lệ & Đạt đồng thuận
         B-->>A: ReviewBallot(APPROVE, counter_evidence="...")
     end

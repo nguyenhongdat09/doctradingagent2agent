@@ -36,7 +36,7 @@ Wake (C3 hoặc BossWake):
     - Nếu thị trường biến động bất thường cần đổi kế hoạch:
         A soạn PLAN TẠM (PROVISIONAL) mới
         B review (nếu dissent bắt buộc có Counter-Plan nến cụ thể)
-        A & B Reconcile (≤2 vòng) → Phong cấp thành PLAN CHỐT (COMMITTED) lưu DB
+        A & B Reconcile (≤`InpMaxDebateRounds` vòng, mặc định 2) → Phong cấp thành PLAN CHỐT (COMMITTED) lưu DB
   Executor MT5 thực thi (nếu có lệnh)
   Refresh:
     - Nếu TotalLot == 0 (toàn bộ lệnh đã đóng) → ĐÓNG MACRO CYCLE → submit_feedback / record_lesson → PairState = FLAT

@@ -15,10 +15,10 @@ Mỗi file đảm nhiệm **duy nhất một trách nhiệm**, không có module
 │   ├── symbols.yaml                # Cấu hình chuyên biệt từng cặp (magic_offset, lot, spread_limit)
 │   └── secrets.env                 # File biến môi trường bí mật (MT5 credentials, LLM keys) — KHÔNG commit Git
 ├── data/
-│   ├── dca_AUDCAD.db               # SQLite 9 bảng riêng biệt cho AUDCAD
-│   ├── dca_AUDNZD.db               # SQLite 9 bảng riêng biệt cho AUDNZD
-│   ├── dca_GBPUSD.db               # SQLite 9 bảng riêng biệt cho GBPUSD
-│   ├── dca_NZDCAD.db               # SQLite 9 bảng riêng biệt cho NZDCAD
+│   ├── dca_AUDCAD.db               # SQLite 14 bảng riêng biệt cho AUDCAD (gồm v2.x plan tables)
+│   ├── dca_AUDNZD.db               # SQLite 14 bảng riêng biệt cho AUDNZD
+│   ├── dca_GBPUSD.db               # SQLite 14 bảng riêng biệt cho GBPUSD
+│   ├── dca_NZDCAD.db               # SQLite 14 bảng riêng biệt cho NZDCAD
 │   └── experience.db               # SQLite dùng chung (Lessons, MemoryCache, Profiles, Feedback)
 ├── logs/
 │   ├── audit/                      # Thư mục lưu file audit log JSONL xoay vòng theo ngày
@@ -28,7 +28,9 @@ Mỗi file đảm nhiệm **duy nhất một trách nhiệm**, không có module
 │   ├── core/
 │   │   ├── __init__.py             # Re-export public core APIs
 │   │   ├── constants.py            # Khai báo tất cả Enums (PairState, ActionType, SignalVerdict, etc.)
-│   │   ├── models.py               # Pydantic v2 schemas (MarketSnapshot, TradePlan, ReviewBallot, etc.)
+│   │   ├── models.py               # Pydantic v2 schemas (MarketSnapshot, TradePlan, ReviewBallot,
+│   │   │                           #   UnifiedContingencyPlan, DeltaMarketSnapshot, MacroCycle,
+│   │   │   │                       #   LessonCandidate, etc. — canonical: doc_agents/04)
 │   │   ├── config.py               # Pydantic Settings: load & validate default_config + symbols.yaml
 │   │   ├── interfaces.py           # Khai báo Protocol/ABC (DataProvider, Executor, LLMClient, etc.)
 │   │   └── logging_setup.py        # Cấu hình loguru / standard logging phân luồng audit và runtime
@@ -42,6 +44,7 @@ Mỗi file đảm nhiệm **duy nhất một trách nhiệm**, không có module
 │   │   │   ├── audit_repo.py        # Ghi vết kiểm toán vào bảng AuditLog
 │   │   │   ├── plans_repo.py        # Lưu trữ các bản ghi Plans của Agent A
 │   │   │   ├── ballots_repo.py      # Lưu trữ các bản ghi Ballots của Agent B
+│   │   │   ├── contingency_plan_repo.py # v2.x: macro_cycles, micro_cycles, contingency_plans, lifecycle transitions
 │   │   │   ├── sessions_repo.py     # Quản lý phiên hội đồng Sessions & Messages
 │   │   │   └── llm_runs_repo.py     # Ghi nhận chi phí token, latency vào bảng LLMRuns
 │   │   └── experience_repo.py      # Thao tác trên experience.db (Lessons, MemoryCache, Profiles)
@@ -82,13 +85,13 @@ Mỗi file đảm nhiệm **duy nhất một trách nhiệm**, không có module
 │   │   │   └── json_parser.py      # Bóc tách JSON có cấu trúc Pydantic kèm cơ chế auto-retry
 │   │   ├── agent_a/
 │   │   │   ├── __init__.py
-│   │   │   ├── planner.py          # Logic phân tích và soạn thảo TradePlan của Agent A
+│   │   │   ├── planner.py          # Logic phân tích và soạn thảo TradePlan + UnifiedContingencyPlan của Agent A
 │   │   │   └── prompts.py          # System Prompt và User Prompt Templates cho Agent A
 │   │   ├── agent_b/
 │   │   │   ├── __init__.py
 │   │   │   ├── challenger.py       # Logic thẩm định độc lập và tạo ReviewBallot của Agent B
 │   │   │   └── prompts.py          # System Prompt và Anti-sycophancy Prompt cho Agent B
-│   │   ├── consensus.py            # Điều phối vòng tranh luận A-B (tối đa 2 vòng)
+│   │   ├── consensus.py            # Điều phối vòng tranh luận A-B (tối đa InpMaxDebateRounds vòng)
 │   │   └── boss/
 │   │       ├── __init__.py
 │   │       ├── boss_channel.py     # Quản lý phiên giao tiếp Boss (Advisory only)
@@ -99,15 +102,19 @@ Mỗi file đảm nhiệm **duy nhất một trách nhiệm**, không có module
 │   └── orchestrator/
 │       ├── __init__.py             # Facade quản lý vòng đời instance
 │       ├── scheduler.py            # Timer C0 (H1 close + 2s), C1/C2 (Flat mid), C3 (Open dynamic)
+│       ├── plan_gate.py            # v2.x: PreTriggerFilter (match price_*/candle_predicates),
+│       │                           #   INVALIDATION auto-exec, prune_hint, plan TTL check
+│       ├── plan_summarizer.py      # v2.x: one-shot worker tóm tắt plan DONE -> plan_history_summaries
 │       ├── freeze_monitor.py       # Giám sát LLM outage -> SYSTEM_FREEZE và Auto-Resume
-│       ├── startup.py              # Quy trình khởi động và ReconcileSymbol
+│       │                           #   (INVALIDATION watcher chạy độc lập, DEC-10)
+│       ├── startup.py              # Quy trình khởi động, ReconcileSymbol + restore Active Plan
 │       ├── reconcile.py            # Thuật toán Light Reconcile và Full Reconcile MT5 vs DB
 │       ├── monitoring.py           # Heartbeat, MT5 health watcher, Queue backlog watcher
 │       └── main_runner.py          # Quản lý vòng lặp chính của 1 symbol duy nhất
 └── tests/
     ├── unit/                       # Unit test cho từng submodule nhỏ
     ├── integration/                # Integration test DB, Queue, State machine, Reconcile
-    ├── scenarios/                  # Bộ 10 kịch bản test quyết định của LLM
+    ├── scenarios/                  # Bộ 11 kịch bản test quyết định của LLM + 7 kịch bản plan lifecycle (P1-P7)
     └── mocks/                      # Mock MT5 API, Mock LLM API
 ```
 
@@ -150,7 +157,7 @@ Sử dụng `typing.Protocol` để áp dụng nguyên lý **Dependency Inversio
 ```python
 from typing import Protocol, List, Dict, Any, Type, Optional
 from pydantic import BaseModel
-from src.core.models import MarketSnapshot, TradePlan, ReviewBallot
+from src.core.models import MarketSnapshot, TradePlan, ReviewBallot, UnifiedContingencyPlan
 
 class IDataProvider(Protocol):
     def get_closed_rates(self, symbol: str, timeframe: int, count: int) -> List[Dict[str, float]]: ...

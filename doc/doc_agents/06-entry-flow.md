@@ -21,7 +21,7 @@ HardValidator: Context×PUSH≥0.6 ∈ matrix OPEN_*
 5. Draft TradePlan ENTRY
 6. HardValidator — fail → WAIT/wake
 7. B ballot (+ MemoryPack)
-8. CHALLENGE ≤2 → revise
+8. CHALLENGE ≤`InpMaxDebateRounds` → revise
 9. APPROVE → A.enqueue_order(PENDING)  // KHÔNG OrderSend
 10. Executor claim → MT5 → Archive / FAILED
 11. On success: PairState=NORMAL; WakeRequest C3

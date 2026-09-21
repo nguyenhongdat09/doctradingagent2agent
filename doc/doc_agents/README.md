@@ -2,9 +2,10 @@
 
 Bộ đặc tả **kiến trúc Multi-Agent tự chủ (Agent A & B)** cho hệ thống DCA: Agent A (Planner), Agent B (Independent Challenger), kèm kênh **Boss Channel** (góp ý / thảo luận hội đồng 3 bên) và Executor Thread tương tác MT5 qua SQLite Queue.
 
-> **Bản cập nhật chính thức:** Thay thế toàn bộ các phiên bản trước.  
+> **Bản cập nhật chính thức:** Thay thế toàn bộ các phiên bản trước. **Phiên bản áp dụng: v2.3.**  
 > **Phương pháp giao dịch cứng:** [`../doc_phuong_phap/`](../doc_phuong_phap/).  
-> **Nguyên tắc ALL-LLM:** MỌI action giao dịch qua Agent A+B consensus. Engine chỉ cung cấp dữ liệu. Xem [ERRATA](../ERRATA.md).
+> **Spec kế hoạch v2.x (canonical):** [`../UPGRADE_CONTINGENCY_PLAN_SPEC.md`](../UPGRADE_CONTINGENCY_PLAN_SPEC.md) — UnifiedContingencyPlan 4 nhánh, PROVISIONAL→COMMITTED, PlanSummarizer, DeltaSnapshot.  
+> **Nguyên tắc ALL-LLM:** MỌI action giao dịch qua Agent A+B consensus. Engine chỉ cung cấp dữ liệu. Ngoại lệ duy nhất: INVALIDATION của Plan Chốt (DEC-10). Xem [ERRATA](../ERRATA.md) (DEC-01..18).
 
 ---
 

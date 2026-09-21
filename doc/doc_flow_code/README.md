@@ -35,10 +35,10 @@ Trước khi viết bất kỳ dòng code nào, mọi developer tham gia dự á
 |---|---|---|
 | [README.md](README.md) | Tổng quan lộ trình, cấu trúc thư mục, tech stack và quy ước code | Toàn bộ |
 | [01-architecture-and-project-structure.md](01-architecture-and-project-structure.md) | Cấu trúc code Python chuẩn Senior, Full File Tree, Pydantic Models, Protocol Interfaces, ADR-001 CLI | Chuẩn bị |
-| [02-phase-1-foundation-engine-db.md](02-phase-1-foundation-engine-db.md) | SQLite 9 bảng + WAL + Repositories, MT5 Adapter (retry/comment/normalize), Structure/Signal/Position Submodules, HardValidator, Executor | **Phase 1** |
+| [02-phase-1-foundation-engine-db.md](02-phase-1-foundation-engine-db.md) | SQLite **14 bảng** (10 vận hành + `MarketSnapshots` + v2.x `macro_cycles`/`micro_cycles`/`contingency_plans`) + WAL + Repositories, MT5 Adapter (retry/comment/normalize), Structure/Signal/Position Submodules, HardValidator, Executor | **Phase 1** |
 | [03-phase-2-experience-db-system.md](03-phase-2-experience-db-system.md) | Xây dựng `experience.db`, LessonWriter (Single-writer), MemoryPack Builder 2 tầng, Deduplication SHA256 | **Phase 2** |
-| [04-phase-3-llm-agents-consensus.md](04-phase-3-llm-agents-consensus.md) | LLM Providers (DeepSeek/OpenAI/Anthropic), Agent A (Planner), Agent B (Challenger), Consensus Engine, Boss Channel, `LLMRuns` logging | **Phase 3** |
-| [05-phase-4-orchestrator-operations.md](05-phase-4-orchestrator-operations.md) | Single-symbol Runner, Scheduler C0 (H1 close + 2s) & C3 (DCA timing), SYSTEM_FREEZE & Light Reconcile, Startup Reconcile, Monitoring | **Phase 4** |
+| [04-phase-3-llm-agents-consensus.md](04-phase-3-llm-agents-consensus.md) | LLM Providers (DeepSeek/OpenAI/Anthropic), Agent A (Planner) + Agent B (Challenger) ra **UnifiedContingencyPlan** (PROVISIONAL→COMMITTED), Consensus Engine, PlanSummarizer, Boss Channel (async), `LLMRuns` logging | **Phase 3** |
+| [05-phase-4-orchestrator-operations.md](05-phase-4-orchestrator-operations.md) | Single-symbol Runner, Scheduler C0 (H1 close + 2s) & C3 (DCA timing), **PreTriggerFilter + Plan Lifecycle Gate (v2.x)**, SYSTEM_FREEZE & Light Reconcile, Startup Reconcile + Active-Plan Restore, Monitoring | **Phase 4** |
 | [06-phase-5-e2e-testing-and-deployment.md](06-phase-5-e2e-testing-and-deployment.md) | Historical Replay Harness, Paper Trading Demo 2 tuần, Multi-process Windows VPS Deployment (PowerShell/NSSM) | **Phase 5** |
 | [07-developer-checklist-and-definition-of-done.md](07-developer-checklist-and-definition-of-done.md) | Master Checklist từng Phase, Definition of Done (DoD), Pre-flight Live deployment checklist | Nghiệm thu |
 
@@ -57,8 +57,8 @@ flowchart TD
 
     P1 -->|Pass Unit & Mock Queue Tests| P2
     P2 -->|Pass MemoryPack Cache & Scoring Tests| P3
-    P3 -->|Pass Mock LLM & 10 Decision Scenarios| P4
-    P4 -->|Pass State Transitions & Freeze Reconcile| P5
+    P3 -->|Pass Mock LLM & 11 Decision Scenarios + Plan Lifecycle| P4
+    P4 -->|Pass State Transitions, Freeze Reconcile & Trigger Gate| P5
     P5 -->|Pass 2 Weeks Paper Trading Demo| LIVE
 ```
 

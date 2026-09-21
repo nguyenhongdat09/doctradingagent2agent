@@ -1,6 +1,6 @@
 # 03 - BỘ MÁY TÍNH TOÁN "MẮT" (EYES ENGINE)
 
-> **File sơ đồ Mermaid tương ứng**: [03-eyes-engine.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/03-eyes-engine.mmd)
+> **File sơ đồ Mermaid tương ứng**: [03-eyes-engine.mmd](03-eyes-engine.mmd)
 
 ---
 

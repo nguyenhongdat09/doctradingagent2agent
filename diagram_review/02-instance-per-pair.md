@@ -1,6 +1,6 @@
 # 02 - KIẾN TRÚC TIẾN TRÌNH ĐỘC LẬP THEO CẶP TIỀN (INSTANCE PER PAIR)
 
-> **File sơ đồ Mermaid tương ứng**: [02-instance-per-pair.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/02-instance-per-pair.mmd)
+> **File sơ đồ Mermaid tương ứng**: [02-instance-per-pair.mmd](02-instance-per-pair.mmd)
 
 ---
 

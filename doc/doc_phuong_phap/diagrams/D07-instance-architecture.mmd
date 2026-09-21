@@ -30,7 +30,7 @@ flowchart TB
     BossChannel -.->|Interrupt Wake| AgentA
     BossChannel -.->|Interrupt Wake| AgentB
     
-    AgentA <-->|Thảo luận / Phản biện <= 2 vòng| AgentB
+    AgentA <-->|Thảo luận / Phản biện <= InpMaxDebateRounds vòng| AgentB
     AgentA & AgentB -->|ActionProposal + Ballot| HardVal
     
     HardVal -->|PASS| OrderQueue

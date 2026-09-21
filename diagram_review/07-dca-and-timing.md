@@ -1,6 +1,6 @@
 # 07 - CƠ CHẾ DCA VÀ THỜI ĐIỂM KÍCH HOẠT (TIMING C0-C3 & DEC-09)
 
-> **File sơ đồ Mermaid tương ứng**: [07-dca-and-timing.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/07-dca-and-timing.mmd)
+> **File sơ đồ Mermaid tương ứng**: [07-dca-and-timing.mmd](07-dca-and-timing.mmd)
 
 ---
 

@@ -2,6 +2,10 @@
 > **Ngày phát hành:** 15/09/2026  
 > **Phiên bản:** Kiến trúc A2A v2.1 — *Provisional/Committed Lifecycle, Price Action Dynamics & Plan Pruning*  
 > **Dành cho:** Toàn bộ đội ngũ Phát triển (AI Agent Dev, Backend Dev, Database Admin, QA/Tester)
+>
+> ⚠️ **ERRATA v2.3 (xem `doc/ERRATA.md`):**
+> - `candle_reaction` (text tự do) đã đổi thành **`candle_predicates[]`** — danh sách predicate machine-checkable (DEC-11), để PreTriggerFilter check được không cần LLM.
+> - "Plan Pruning tự động" được siết lại: engine chỉ set **`prune_hint=true`**; việc cắt/tinh chỉnh kịch bản thực hiện trong **replan cycle của A+B** (DEC-14) — engine không tự sửa Plan Chốt.
 
 ---
 
@@ -98,18 +102,18 @@ Kịch bản trong Plan không chỉ còn là con số giá khô khan, mà mô t
 
 ## 📁 4. Chi Tiết Các File Được Cập Nhật
 
-1. **[`doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md`](file:///e:/PythonProject/doctradingagent2agent/doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md)**:
+1. **[`doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md`](doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md)**:
    - Bổ sung định nghĩa vòng đời `plan_state: PROVISIONAL | COMMITTED`.
    - Bổ sung cấu trúc dữ liệu `price_action_reaction` và `approach_momentum`.
    - Bổ sung quy trình và pseudo-code thuật toán `Plan Pruning & Dynamic Focusing`.
-2. **[`doc/doc_agents/03-consensus-protocol.md`](file:///e:/PythonProject/doctradingagent2agent/doc/doc_agents/03-consensus-protocol.md)**:
+2. **[`doc/doc_agents/03-consensus-protocol.md`](doc/doc_agents/03-consensus-protocol.md)**:
    - Bổ sung quy tắc: Plan chỉ chuyển từ `PROVISIONAL` sang `COMMITTED` khi 100% Agent đồng thuận.
    - Quy định: Khi đã có Plan Chốt, chu kỳ sau cấm Agent phân tích lại biểu đồ từ đầu.
-3. **[`doc/doc_agents/04-message-schemas.md`](file:///e:/PythonProject/doctradingagent2agent/doc/doc_agents/04-message-schemas.md)**:
+3. **[`doc/doc_agents/04-message-schemas.md`](doc/doc_agents/04-message-schemas.md)**:
    - Cập nhật schema `UnifiedContingencyPlan`: thêm trường `plan_state`, `approach_momentum`, `candle_reaction`.
-4. **[`doc/doc_agents/05-scheduler-wakeup.md`](file:///e:/PythonProject/doc/doc_agents/05-scheduler-wakeup.md)**:
+4. **[`doc/doc_agents/05-scheduler-wakeup.md`](doc/doc_agents/05-scheduler-wakeup.md)**:
    - Cập nhật luồng đánh thức: Chỉ đọc Plan Chốt; nếu giá đi một chiều thì thực thi bước cắt tỉa kịch bản (Plan Pruning).
-5. **[`doc/doc_agents/07-dca-dual-review-loop.md`](file:///e:/PythonProject/doctradingagent2agent/doc/doc_agents/07-dca-dual-review-loop.md)**:
+5. **[`doc/doc_agents/07-dca-dual-review-loop.md`](doc/doc_agents/07-dca-dual-review-loop.md)**:
    - Áp dụng Price Action vào lệnh DCA: DCA khi giá hồi nhưng phải có nến hãm lực, không DCA mù quáng khi nến đang xả quá mạnh.
 
 ---

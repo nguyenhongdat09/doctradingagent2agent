@@ -1,6 +1,6 @@
 # 09 - BỘ NHỚ KINH NGHIỆM VÀ QUẢN TRỊ TOKEN (EXPERIENCE MEMORY)
 
-> **File sơ đồ Mermaid tương ứng**: [09-experience-memory.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/09-experience-memory.mmd)
+> **File sơ đồ Mermaid tương ứng**: [09-experience-memory.mmd](09-experience-memory.mmd)
 
 ---
 

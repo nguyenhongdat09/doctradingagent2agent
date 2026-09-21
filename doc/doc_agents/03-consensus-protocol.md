@@ -41,16 +41,22 @@ CONSENSUS_AUTO ⇔
 
 
 ### Quy tắc Bắt Buộc Khi B Không Đồng Thuận (Dissent Protocol):
-1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {REJECT, CHALLENGE}`, ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:
+1. **Không cho phép "từ chối khống":** Nếu `B.decision ∈ {CHALLENGE, VETO}` (enum chuẩn DEC-17: `APPROVE | CHALLENGE | VETO`), ballot của B **BẮT BUỘC** phải chứa trường `counter_plan`:
    - `waiting_for`: Chỉ rõ đang chờ đợi điều kiện gì (chờ nến rút râu, chờ cụm nến đỏ/xanh đảo chiều, hãm lực...).
    - `scenarios_override`: Kịch bản chi tiết 2 đầu kèm yêu cầu Price Action nến cụ thể.
-2. **Vòng Hòa Giải (Reconciliation Loop - ≤2 vòng/cycle):**
+2. **Vòng Hòa Giải (Reconciliation Loop — tối đa `InpMaxDebateRounds` vòng/cycle, mặc định 2):**
    - Vòng 1: A đề xuất `TradePlan` + `ContingencyPlan` (`PROVISIONAL`). B phản hồi `ballot` kèm `counter_plan`.
-   - Vòng 2: A tiếp thu `counter_plan` của B, điều chỉnh lại các mốc giá và điều kiện nến thành `Reconciled Plan` (`PROVISIONAL`).
+   - Vòng kế: A tiếp thu `counter_plan` của B, điều chỉnh lại các mốc giá và điều kiện nến thành `Reconciled Plan` (`PROVISIONAL`).
    - B ký duyệt `APPROVE` trên `Reconciled Plan` → Chuyển trạng thái sang `COMMITTED` (Plan Chốt) và lưu vào DB.
-3. **Nếu sau 2 vòng vẫn xung đột:**
+   - Số vòng tối đa đọc từ tham số `InpMaxDebateRounds` (`doc_phuong_phap/08-parameters.md`) — **không hardcode 2**; chỉ đổi config là đổi giới hạn.
+3. **Nếu sau `InpMaxDebateRounds` vòng vẫn xung đột (DEC-13 — Fallback Plan Kế Thừa Bảo Vệ):**
    - Hệ thống tự động chuyển sang kịch bản an toàn nhất: `action = WAIT` (STANDBY), hẹn giờ wake nến kế tiếp.
    - Luôn luôn phải có 1 `COMMITTED PLAN` (tối thiểu là kịch bản STANDBY/Cắt lỗ bảo vệ) được lưu vào DB.
+   - **Bất biến:** plan fallback **bắt buộc kế thừa `INVALIDATION` + các nhánh bảo vệ vị thế** của plan trước (giá trị mốc giữ nguyên) — không bao giờ để rổ lệnh "trần" không có stop bảo vệ trong cửa sổ giữa 2 plan.
+   - Plan cũ bị thay thế → `plan_status = 'SUPERSEDED'` (không phải `CANCELLED`; `CANCELLED` chỉ cho plan hủy chủ động chưa từng active — DEC-17).
+
+### Ngoại lệ ALL-LLM duy nhất (DEC-10)
+Nhánh `INVALIDATION` của Plan Chốt đã COMMITTED được phép **deterministic auto-execute** (không chờ LLM, chạy cả khi `SYSTEM_FREEZE`) vì consent đã được ký lúc commit. `UPSIDE`/`DOWNSIDE` vẫn cần Fast Consensus A→B. `STANDBY` không action. Chi tiết: `../UPGRADE_CONTINGENCY_PLAN_SPEC.md` §6.
 
 ## 3. Mode BOSS (v1 — không Override)
 

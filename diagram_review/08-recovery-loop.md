@@ -1,6 +1,6 @@
 # 08 - VÒNG LẶP CỨU LỖ VÀ CHIẾN THUẬT PAYOFF (RECOVERY LOOP)
 
-> **File sơ đồ Mermaid tương ứng**: [08-recovery-loop.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/08-recovery-loop.mmd)
+> **File sơ đồ Mermaid tương ứng**: [08-recovery-loop.mmd](08-recovery-loop.mmd)
 
 ---
 

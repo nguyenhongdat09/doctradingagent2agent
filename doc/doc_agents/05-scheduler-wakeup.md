@@ -23,12 +23,12 @@ Mục đích: agents không ngủ xuyên suốt H1; **tối thiểu** 1 lần d�
 Các quy tắc C1/C2 bên dưới chỉ là **wake bổ sung** giữa nến (tùy chọn), KHÔNG thay thế
 việc thức lúc H1 close.
 
-**Chống trùng lặp (bắt buộc):**
-- Mỗi nến H1 chỉ xử lý **1 lần** dựa trên `last_processed_bar_id` lưu trong `PairState`
+**Chống trùng lặp (bắt buộc — DEC-12):**
+- Mỗi nến H1 chỉ xử lý **tín hiệu H1-close (C0)** **1 lần** dựa trên `last_processed_bar_id` lưu trong `PairState`
   (giá trị = `iTime(H1)` của nến đã xử lý).
-- Khi wake, nếu `H1_close_time` của nến hiện tại == `last_processed_bar_id` → bỏ qua (đã xử lý).
+- Dedupe này **CHỈ áp dụng cho bước "xử lý tín hiệu H1-close"**, KHÔNG áp dụng cho wake nói chung — các wake C3 intra-bar trong cùng 1 nến vẫn được chạy (DEC-09) để check trigger/DCA. Dedupe cho trigger/plan-execution dùng `trigger_event_id` riêng (xem §9).
+- Khi C0 wake, nếu `H1_close_time` của nến vừa đóng == `last_processed_bar_id` → bỏ qua bước xử lý tín hiệu (đã xử lý).
 - Nếu khác → xử lý, rồi cập nhật `last_processed_bar_id`.
-- Tránh tình trạng 2 lần wake trong cùng 1 nến mà xử lý tín hiệu 2 lần.
 
 ## 3. Công thức thời gian H1
 
@@ -69,20 +69,22 @@ Agent A tự chọn `interval` C3 dựa trên diễn biến thị trường:
 | RECOVERY đang adverse squeeze | sát hơn (WakeMin–15m) |
 
 ```
-WakeMin = 3 minutes   // input
-WakeMax = 60 minutes  // input
-interval = clamp(A_choice, WakeMin, WakeMax)
+WakeMinSeconds = 180   // input (3 phút)
+WakeMaxSeconds = 3600  // input (60 phút)
+interval = clamp(A_choice, WakeMinSeconds, WakeMaxSeconds)
 next_wake_at = now + interval
 ```
 
 > Tại mỗi lần wake C3 (hoặc C0 H1 close):
-> 1. Engine load duy nhất **PLAN CHỐT (COMMITTED)** kỳ trước + chỉ cập nhật `DeltaMarketSnapshot` (giá Bid/Ask, nến mới nhất, PnL) — **KHÔNG gửi lại 30 nến lịch sử và CẤM phân tích lại biểu đồ từ đầu**.
-> 2. **Pre-check Price Action & Trigger:** So khớp nến mới và giá thị trường với các kịch bản trong Plan Chốt:
->    - Nếu giá chạm vùng cản **VÀ xuất hiện nến xác nhận hãm lực / rút râu (`candle_reaction`)**: Kích hoạt quy trình Fast Consensus (A và B xác nhận khớp đúng cam kết) → Enqueue thực thi ngay.
->    - Nếu chạm vùng nhưng nến đi quá mạnh (thân đặc, chưa hãm lực): Không vào lệnh chặn đầu xe lửa; kích hoạt **Thuật toán Plan Pruning** (xóa nhánh đối lập đã lỗi thời, dời vùng cản và thắt chặt điều kiện nến cho Plan Chốt mới).
->    - Nếu chạm `INVALIDATION`: Thực thi đóng rổ lệnh khẩn cấp.
+> 1. Engine load duy nhất **PLAN CHỐT (COMMITTED)** kỳ trước + chỉ cập nhật `DeltaMarketSnapshot` (giá Bid/Ask, `latest_bars` ≥3 nến đã đóng, PnL) — **KHÔNG gửi lại 30 nến lịch sử và CẤM phân tích lại biểu đồ từ đầu**. Escape hatch (DEC-16): `d1_context_changed` hoặc `plan_expired` → bắt buộc replan.
+> 2. **Pre-check Price Action & Trigger (deterministic, engine):** So khớp `price_*` + `candle_predicates` (DEC-11) với các kịch bản trong Plan Chốt:
+>    - Nếu giá chạm vùng cản **VÀ `candle_predicates` đạt**: Kích hoạt Fast Consensus (A và B xác nhận khớp đúng cam kết) → Enqueue thực thi ngay.
+>    - Nếu chạm vùng nhưng nến đi quá mạnh (predicates fail, thân đặc chưa hãm lực): Không vào lệnh chặn đầu xe lửa; engine **chỉ set `prune_hint=true`** → A+B họp replan (xóa nhánh đối lập lỗi thời, dời cản, thắt chặt điều kiện — DEC-14, engine không tự sửa plan).
+>    - Nếu chạm `INVALIDATION` (**DEC-10**): Thực thi đóng rổ lệnh khẩn cấp **deterministic, không chờ LLM — kể cả khi `SYSTEM_FREEZE`** (consent đã ký lúc commit plan). Vẫn qua HardValidator + Executor.
 >    - Nếu rơi vào `STANDBY`: Giữ nguyên lệnh, không gọi LLM suy nghĩ lại từ đầu, hẹn giờ wake tiếp theo.
-> 3. Chỉ khi cần tái lập kế hoạch mới hoặc Plan Pruning, A và B mới tiến hành họp sinh `Plan Tạm` $\rightarrow$ hòa giải $\rightarrow$ `Plan Chốt` mới.
+> 3. Chỉ khi cần tái lập kế hoạch mới hoặc Plan Pruning, A và B mới tiến hành họp sinh `Plan Tạm` $\rightarrow$ hòa giải $\rightarrow$ `Plan Chốt` mới (plan mới ở wake kế; plan cũ → `SUPERSEDED`, DEC-13).
+
+**Hòa giải 2 cơ chế đặt wake:** plan `STANDBY.params.next_wake_type`/`fallback_timer_minutes` là *đề xuất của plan*; `WakeRequest` của A mới là quyết định cuối (clamp WakeMin–WakeMax). Khi plan đề xuất `H1_CLOSE` nhưng state là OPEN, C0 vẫn bắt buộc theo DEC-09 — wake sớm hơn của hai nguồn thắng.
 
 ## 6. BossWake interrupt
 
@@ -124,16 +126,23 @@ loop:
   next_wake_at = A.last_WakeRequest.next_wake_at
 ```
 
-## 9. Chống trùng tín hiệu (last_processed_bar_id)
+## 9. Chống trùng tín hiệu (last_processed_bar_id) — DEC-12
+
+Dedupe theo `bar_id` **chỉ áp cho bước xử lý tín hiệu H1-close (C0)**. Wake C3 intra-bar trong cùng nến KHÔNG bị skip — nếu không sẽ triệt tiêu DEC-09 (mỗi C3 wake đều check DCA/trigger).
 
 ```
-on wake:
-  bar_id = iTime(symbol, H1, 0)          // nến H1 hiện tại
-  if bar_id == PairState.last_processed_bar_id:
-      skip  // đã xử lý nến này rồi
-  else:
-      process_cycle(...)
-      PairState.last_processed_bar_id = bar_id
+on wake(event_type):
+  // event_type: C0_H1_CLOSE | C3_TIMER | BOSS_WAKE | PRICE_ALERT
+  if event_type == C0_H1_CLOSE:
+      bar_id = iTime(symbol, H1, 0)          // nến H1 vừa đóng
+      if bar_id == PairState.last_processed_bar_id:
+          skip_signal_step  // chỉ skip bước tín hiệu; trigger check vẫn chạy
+      else:
+          process_h1_close_signal(...)
+          PairState.last_processed_bar_id = bar_id
+  // Trigger/plan execution luôn chạy mọi wake, dedupe bằng trigger_event_id:
+  //   trigger_event_id = f"{plan_id}:{matched_scenario}:{bar_id}"
+  //   nếu đã EXECUTING/DONE → skip (idempotent)
   // Ghi PairState.update (ADL: dca_<symbol>.db)
 ```
 

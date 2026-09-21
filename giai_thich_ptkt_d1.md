@@ -1,6 +1,8 @@
 # ĐẶC TẢ KIẾN TRÚC: CƠ CHẾ PHÂN TÍCH CONTEXT D1 & LUỒNG DỮ LIỆU GIỮA PYTHON VÀ LLM AGENTS
 
 > **Tài liệu bàn giao Developer**: Làm rõ cơ chế phân tách giữa **Python Engine (Đôi mắt toán học)** và **LLM Agents (Bộ não suy nghĩ)**, giải thích cách truyền nến OHLC tối ưu chi phí token và cơ chế mở rộng dữ liệu linh hoạt (Dynamic Data Fetch).
+>
+> ⚠️ **Ghi chú v2.x:** Tài liệu này mô tả chu kỳ **full-snapshot** (C0/khi không có plan). Khi đã có `Active Plan` (v2.x), các micro cycle dùng `DeltaMarketSnapshot` nhẹ hơn và output của Agent là `UnifiedContingencyPlan` (4 nhánh), không chỉ `TradePlan` — xem `doc/UPGRADE_CONTINGENCY_PLAN_SPEC.md`. Cơ chế Engine-nhãn/LLM-đọc-OHLC/tool-call bên dưới vẫn nguyên giá trị.
 
 ---
 

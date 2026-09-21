@@ -1,6 +1,6 @@
 # 13 - TRÌNH TỰ CHI TIẾT MỘT CHU KỲ HOÀN CHỈNH (SEQUENCE ONE CYCLE)
 
-> **File sơ đồ Mermaid tương ứng**: [13-sequence-one-cycle.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/13-sequence-one-cycle.mmd)
+> **File sơ đồ Mermaid tương ứng**: [13-sequence-one-cycle.mmd](13-sequence-one-cycle.mmd)
 
 ---
 

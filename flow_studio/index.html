@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>A2A Flow Studio — Quy trình vận hành v2.3 (kiểu n8n)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#0a0e17; --bg2:#0d111a; --card:#141b2d; --border:rgba(255,255,255,.09);
+  --txt:#f1f5f9; --txt2:#94a3b8; --txt3:#64748b;
+  --c-engine:#3b82f6; --c-agent:#8b5cf6; --c-orch:#06b6d4; --c-db:#10b981;
+  --c-exec:#f59e0b; --c-ext:#64748b; --c-dec:#f43f5e; --c-boss:#ec4899;
+  --c-worker:#84cc16; --c-state:#eab308;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--txt);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1.2rem;background:rgba(18,24,38,.85);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);z-index:60}
+.brand{display:flex;align-items:center;gap:.7rem}
+.logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:1.15rem}
+.brand h1{font-family:Outfit;font-size:1.05rem}
+.brand small{display:block;font-size:.68rem;color:var(--c-orch);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.actions{display:flex;gap:.45rem}
+.btn{display:inline-flex;align-items:center;gap:.35rem;padding:.42rem .8rem;font-size:.78rem;font-weight:500;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--txt);cursor:pointer;font-family:inherit;transition:.15s}
+.btn:hover{background:rgba(255,255,255,.11)}
+.btn.on{background:rgba(16,185,129,.18);border-color:var(--c-db);color:#6ee7b7}
+.btn.primary{background:linear-gradient(135deg,#3b82f6,#2563eb);border:none}
+nav.tabs{display:flex;gap:.4rem;padding:.5rem 1.2rem;background:rgba(18,24,38,.5);border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:.4rem .85rem;border-radius:6px;font-size:.8rem;color:var(--txt2);border:1px solid transparent;background:transparent;cursor:pointer;white-space:nowrap;font-family:inherit}
+.tab:hover{color:var(--txt);background:rgba(255,255,255,.04)}
+.tab.active{color:#fff;background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.35);font-weight:600}
+.layout{flex:1;display:grid;grid-template-columns:1fr 340px;min-height:0}
+.viewport{position:relative;overflow:hidden;background:var(--bg2);cursor:grab;background-image:radial-gradient(circle,rgba(255,255,255,.05) 1px,transparent 1px);background-size:24px 24px}
+.viewport.grabbing{cursor:grabbing}
+.world{position:absolute;top:0;left:0;transform-origin:0 0}
+svg.edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+svg.edges path{pointer-events:stroke;cursor:pointer}
+svg.edges text{pointer-events:none}
+.node{position:absolute;width:215px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--nc,#888);border-radius:10px;padding:.6rem .7rem;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.35);transition:box-shadow .15s,border-color .15s;user-select:none}
+.node:hover{box-shadow:0 6px 20px rgba(0,0,0,.55),0 0 0 1px var(--nc);z-index:5}
+.node.sel{outline:2px solid var(--nc);z-index:6}
+.node .nicon{float:left;font-size:1rem;margin-right:.45rem;margin-top:.05rem}
+.node .ntitle{font-size:.8rem;font-weight:600;line-height:1.25}
+.node .nsub{font-family:'JetBrains Mono';font-size:.62rem;color:var(--txt3);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .badge{display:inline-block;font-size:.58rem;font-weight:700;padding:.05rem .35rem;border-radius:4px;margin-top:.3rem;margin-right:.2rem;background:rgba(255,255,255,.07);color:var(--nc)}
+.port{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--nc);border:2px solid var(--bg2);top:50%;transform:translateY(-50%)}
+.port.in{left:-6px}.port.out{right:-6px}
+.port.out:hover{transform:translateY(-50%) scale(1.5)}
+.toolbar{position:absolute;top:.8rem;right:.9rem;display:flex;gap:.35rem;background:rgba(18,24,38,.92);border:1px solid var(--border);border-radius:8px;padding:.3rem;z-index:20}
+.tbtn{width:30px;height:30px;border:none;border-radius:6px;background:transparent;color:var(--txt2);cursor:pointer;font-size:.85rem}
+.tbtn:hover{background:rgba(255,255,255,.1);color:#fff}
+.legend{position:absolute;left:.9rem;bottom:.8rem;display:flex;flex-wrap:wrap;gap:.5rem;background:rgba(18,24,38,.9);border:1px solid var(--border);border-radius:8px;padding:.4rem .7rem;z-index:15;font-size:.66rem;color:var(--txt2)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:.3rem}
+.tooltip{position:fixed;max-width:330px;background:#1a2338;border:1px solid var(--border);border-radius:9px;padding:.65rem .8rem;font-size:.76rem;color:var(--txt2);line-height:1.45;pointer-events:none;z-index:100;display:none;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+.tooltip b{color:#fff;display:block;margin-bottom:.2rem}
+.tooltip .tt-sub{font-family:'JetBrains Mono';font-size:.62rem;color:var(--txt3);display:block;margin-bottom:.3rem}
+.side{background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+.side-head{padding:.7rem .9rem;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt2)}
+.side-body{flex:1;overflow-y:auto;padding:.9rem}
+.flowdesc{font-size:.78rem;color:var(--txt2);line-height:1.5;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:.6rem .7rem;margin-bottom:.9rem}
+.field{margin-bottom:.8rem}
+.field label{display:block;font-size:.66rem;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem}
+.field input,.field textarea,.field select{width:100%;background:#0a0f1c;border:1px solid var(--border);border-radius:6px;color:var(--txt);font-size:.78rem;padding:.45rem .55rem;font-family:inherit}
+.field textarea{min-height:90px;resize:vertical;line-height:1.45}
+.doclink{display:block;font-family:'JetBrains Mono';font-size:.66rem;color:#7dd3fc;text-decoration:none;padding:.28rem .4rem;border-radius:5px;word-break:break-all}
+.doclink:hover{background:rgba(125,211,252,.1)}
+.decchip{display:inline-block;font-size:.62rem;font-weight:700;color:#fcd34d;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:5px;padding:.1rem .4rem;margin:.15rem .2rem .15rem 0}
+.detail h3{font-size:.92rem;margin-bottom:.15rem}
+.detail .dsub{font-family:'JetBrains Mono';font-size:.66rem;color:var(--txt3);margin-bottom:.6rem}
+.detail p{font-size:.79rem;color:var(--txt2);line-height:1.55;margin-bottom:.8rem}
+.rowbtns{display:flex;gap:.4rem;margin-top:.7rem;flex-wrap:wrap}
+.danger{color:#fda4af;border-color:rgba(244,63,94,.4)}
+.hint{font-size:.68rem;color:var(--txt3);line-height:1.4;margin-top:.8rem}
+.toast{position:fixed;bottom:1.6rem;left:50%;transform:translate(-50%,80px);background:#1e293b;border:1px solid var(--border);padding:.6rem 1.1rem;border-radius:8px;font-size:.8rem;opacity:0;transition:.25s;z-index:200}
+.toast.show{transform:translate(-50%,0);opacity:1}
+.empty{color:var(--txt3);font-size:.78rem;text-align:center;padding:2rem 1rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🔀</div>
+    <div><h1>A2A Flow Studio</h1><small>Quy trình vận hành v2.3 — node-based (kiểu n8n)</small></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btn-edit" title="Bật/tắt chế độ chỉnh sửa (kéo node, sửa nội dung)">✏️ Chế độ Sửa</button>
+    <button class="btn" id="btn-add-node" title="Thêm node mới vào flow hiện tại" disabled>＋ Node</button>
+    <button class="btn" id="btn-link" title="Nối 2 node: bật rồi click node nguồn → node đích" disabled>🔗 Nối edge</button>
+    <button class="btn" id="btn-export" title="Tải file flows-data.js đã cập nhật — ghi đè file cũ để lưu vĩnh viễn">💾 Xuất flows-data.js</button>
+    <button class="btn" id="btn-import" title="Nhập file flows-data.js / .json">📂 Nhập</button>
+    <button class="btn" id="btn-reset" title="Xóa chỉnh sửa local, về dữ liệu gốc trong file">↺ Reset</button>
+    <input type="file" id="file-import" accept=".js,.json" style="display:none" />
+  </div>
+</header>
+<nav class="tabs" id="tabs"></nav>
+<div class="layout">
+  <div class="viewport" id="viewport">
+    <div class="world" id="world">
+      <svg class="edges" id="edges"></svg>
+      <div id="nodes"></div>
+    </div>
+    <div class="toolbar">
+      <button class="tbtn" id="z-in" title="Phóng to">＋</button>
+      <button class="tbtn" id="z-out" title="Thu nhỏ">－</button>
+      <button class="tbtn" id="z-fit" title="Vừa khung">⛶</button>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <aside class="side">
+    <div class="side-head" id="side-title">Thông tin node</div>
+    <div class="side-body" id="side-body"></div>
+  </aside>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<div class="toast" id="toast"></div>
+
+<script src="flows-data.js"></script>
+<script>
+'use strict';
+// ===================== STATE =====================
+const LS_KEY = 'a2a_flow_data_v23';
+const TYPE_META = {
+  engine:      {c:'#3b82f6', icon:'🔧', label:'Engine (Mắt)'},
+  agent:       {c:'#8b5cf6', icon:'🧠', label:'LLM Agent'},
+  orchestrator:{c:'#06b6d4', icon:'🎛️', label:'Orchestrator'},
+  db:          {c:'#10b981', icon:'🗄️', label:'Database'},
+  executor:    {c:'#f59e0b', icon:'⚙️', label:'Executor'},
+  external:    {c:'#94a3b8', icon:'🔌', label:'External'},
+  decision:    {c:'#f43f5e', icon:'🔀', label:'Rẽ nhánh'},
+  boss:        {c:'#ec4899', icon:'👤', label:'Boss'},
+  worker:      {c:'#84cc16', icon:'🤖', label:'Worker'},
+  state:       {c:'#eab308', icon:'🚦', label:'State'}
+};
+let DATA = loadData();
+let curFlow = DATA.flows[0].id;
+let scale = 1, panX = 20, panY = 20;
+let editMode = false, linkMode = false, linkFrom = null;
+let sel = null; // {kind:'node'|'edge', id|index}
+let nodeEls = {};
+
+function loadData(){
+  try{
+    const s = localStorage.getItem(LS_KEY);
+    if(s){ const d = JSON.parse(s); if(d.version===window.FLOW_DATA.version) return d; }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(window.FLOW_DATA));
+}
+function persist(){ localStorage.setItem(LS_KEY, JSON.stringify(DATA)); }
+function flow(){ return DATA.flows.find(f=>f.id===curFlow); }
+function node(id){ return flow().nodes.find(n=>n.id===id); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+// ===================== RENDER =====================
+const viewport=document.getElementById('viewport'), world=document.getElementById('world'),
+      svg=document.getElementById('edges'), nodesEl=document.getElementById('nodes');
+
+function renderTabs(){
+  const tabs=document.getElementById('tabs'); tabs.innerHTML='';
+  DATA.flows.forEach(f=>{
+    const b=document.createElement('button');
+    b.className='tab'+(f.id===curFlow?' active':''); b.textContent=f.icon+' '+f.title;
+    b.onclick=()=>{curFlow=f.id; sel=null; linkFrom=null; renderAll();};
+    tabs.appendChild(b);
+  });
+}
+function renderLegend(){
+  const l=document.getElementById('legend');
+  l.innerHTML = Object.entries(TYPE_META).map(([k,m])=>`<span><i style="background:${m.c}"></i>${m.label}</span>`).join('');
+}
+function renderAll(){
+  renderTabs(); renderNodes(); renderEdges(); renderSide();
+}
+function renderNodes(){
+  nodesEl.innerHTML=''; nodeEls={};
+  flow().nodes.forEach(n=>{
+    const m=TYPE_META[n.type]||TYPE_META.external;
+    const d=document.createElement('div');
+    d.className='node'+(sel&&sel.kind==='node'&&sel.id===n.id?' sel':'');
+    d.style.left=n.x+'px'; d.style.top=n.y+'px'; d.style.setProperty('--nc',m.c);
+    d.dataset.id=n.id;
+    d.innerHTML=`<div class="port in"></div><div class="port out"></div>
+      <span class="nicon">${m.icon}</span><div class="ntitle">${esc(n.title)}</div>
+      ${n.sub?`<div class="nsub">${esc(n.sub)}</div>`:''}
+      <div>${(n.decs||[]).map(x=>`<span class="badge">${esc(x)}</span>`).join('')}</div>`;
+    // events
+    d.addEventListener('mouseenter',e=>showTip(n,e));
+    d.addEventListener('mousemove',e=>moveTip(e));
+    d.addEventListener('mouseleave',hideTip);
+    d.addEventListener('click',e=>{e.stopPropagation(); onNodeClick(n);});
+    d.addEventListener('mousedown',e=>{e.stopPropagation(); startNodeDrag(n,d,e);});
+    nodesEl.appendChild(d); nodeEls[n.id]=d;
+  });
+}
+function anchor(n,side){
+  const el=nodeEls[n.id]; const h=el?el.offsetHeight:56; const w=el?el.offsetWidth:215;
+  if(side==='out') return {x:n.x+w, y:n.y+h/2};
+  return {x:n.x, y:n.y+h/2};
+}
+function renderEdges(){
+  const f=flow();
+  let s=`<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#64748b"/></marker></defs>`;
+  f.edges.forEach((e,i)=>{
+    const a=node(e.from), b=node(e.to); if(!a||!b) return;
+    const p1=anchor(a,'out'), p2=anchor(b,'in');
+    const dx=Math.max(60, Math.abs(p2.x-p1.x)*0.5);
+    const d=`M${p1.x},${p1.y} C${p1.x+dx},${p1.y} ${p2.x-dx},${p2.y} ${p2.x},${p2.y}`;
+    const selEdge = sel&&sel.kind==='edge'&&sel.index===i;
+    s+=`<path d="${d}" fill="none" stroke="${selEdge?'#f43f5e':(e.dashed?'#64748b':'#475569')}"
+      stroke-width="${selEdge?2.5:1.7}" ${e.dashed?'stroke-dasharray="6,4"':''}
+      marker-end="url(#arr)" data-ei="${i}"/>`;
+    if(e.label){
+      const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2 - 6;
+      s+=`<text x="${mx}" y="${my}" text-anchor="middle" font-size="10" fill="#94a3b8"
+        font-family="Inter" style="paint-order:stroke;stroke:#0d111a;stroke-width:3">${esc(e.label)}</text>`;
+    }
+    // invisible fat hitbox for edge click
+    s+=`<path d="${d}" fill="none" stroke="transparent" stroke-width="14" data-ei="${i}" class="hit"/>`;
+  });
+  svg.innerHTML=s;
+  svg.querySelectorAll('path.hit').forEach(p=>p.addEventListener('click',ev=>{
+    ev.stopPropagation(); sel={kind:'edge',index:+p.dataset.ei}; renderNodes(); renderEdges(); renderSide();
+  }));
+}
+
+// ===================== SIDE PANEL =====================
+const sideBody=document.getElementById('side-body'), sideTitle=document.getElementById('side-title');
+function renderSide(){
+  const f=flow();
+  let html=`<div class="flowdesc"><b>${esc(f.icon)} ${esc(f.title)}</b><br>${esc(f.desc)}</div>`;
+  if(!sel){ html+=`<div class="empty">Hover node để xem nhanh.<br>Click node/edge để xem chi tiết.<br><br>Bật <b>✏️ Chế độ Sửa</b> để chỉnh sửa & kéo-thả.</div>`; }
+  else if(sel.kind==='node'){
+    const n=node(sel.id); if(!n){sel=null;renderSide();return;}
+    if(!editMode){
+      html+=`<div class="detail"><h3>${esc(n.title)}</h3>
+        <div class="dsub">${esc(n.sub||'')}</div><p>${esc(n.desc||'')}</p>
+        <div class="field"><label>Tài liệu liên quan</label>
+        ${(n.docs&&n.docs.length)? n.docs.map(d=>`<a class="doclink" href="../${esc(d)}" target="_blank">📄 ${esc(d)}</a>`).join('') : '<span style="font-size:.72rem;color:var(--txt3)">—</span>'}</div>
+        <div class="field"><label>Quyết định (DEC/ADR)</label>
+        ${(n.decs&&n.decs.length)? n.decs.map(d=>`<span class="decchip">${esc(d)}</span>`).join('') : '<span style="font-size:.72rem;color:var(--txt3)">—</span>'}</div></div>`;
+    } else {
+      html+=`<div class="detail">
+        <div class="field"><label>Tiêu đề</label><input id="f-title" value="${esc(n.title)}"></div>
+        <div class="field"><label>Sub (module/file)</label><input id="f-sub" value="${esc(n.sub||'')}"></div>
+        <div class="field"><label>Loại</label><select id="f-type">${Object.keys(TYPE_META).map(t=>`<option ${t===n.type?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Mô tả</label><textarea id="f-desc">${esc(n.desc||'')}</textarea></div>
+        <div class="field"><label>Docs (mỗi dòng 1 path)</label><textarea id="f-docs">${esc((n.docs||[]).join('\n'))}</textarea></div>
+        <div class="field"><label>DECs (phẩy)</label><input id="f-decs" value="${esc((n.decs||[]).join(', '))}"></div>
+        <div class="rowbtns">
+          <button class="btn primary" id="f-save">💾 Lưu node</button>
+          <button class="btn danger" id="f-del">🗑 Xóa node</button>
+        </div></div>`;
+    }
+  } else if(sel.kind==='edge'){
+    const e=f.edges[sel.index];
+    html+=`<div class="detail"><h3>Edge: ${esc(e.from)} → ${esc(e.to)}</h3>
+      <div class="field"><label>Nhãn</label><input id="f-elabel" value="${esc(e.label||'')}" ${editMode?'':'disabled'}></div>
+      ${editMode?`<div class="rowbtns">
+        <button class="btn primary" id="f-esave">💾 Lưu nhãn</button>
+        <button class="btn danger" id="f-edel">🗑 Xóa edge</button></div>`:''}
+      <div class="hint">${e.dashed?'Nét đứt = luồng async/optional':'Nét liền = luồng chính'}</div></div>`;
+  }
+  sideTitle.textContent = sel ? (editMode?'✏️ Sửa / Chi tiết':'Chi tiết') : 'Thông tin node';
+  sideBody.innerHTML=html;
+  // bind edit events
+  const qs=id=>document.getElementById(id);
+  if(editMode && sel && sel.kind==='node'){
+    qs('f-save').onclick=()=>{
+      const n=node(sel.id);
+      n.title=qs('f-title').value; n.sub=qs('f-sub').value; n.type=qs('f-type').value;
+      n.desc=qs('f-desc').value;
+      n.docs=qs('f-docs').value.split('\n').map(s=>s.trim()).filter(Boolean);
+      n.decs=qs('f-decs').value.split(',').map(s=>s.trim()).filter(Boolean);
+      persist(); renderAll(); toast('Đã lưu node');
+    };
+    qs('f-del').onclick=()=>{
+      const f=flow(); f.nodes=f.nodes.filter(x=>x.id!==sel.id);
+      f.edges=f.edges.filter(e=>e.from!==sel.id&&e.to!==sel.id);
+      sel=null; persist(); renderAll(); toast('Đã xóa node');
+    };
+  }
+  if(editMode && sel && sel.kind==='edge'){
+    qs('f-esave').onclick=()=>{ flow().edges[sel.index].label=qs('f-elabel').value; persist(); renderEdges(); toast('Đã lưu edge'); };
+    qs('f-edel').onclick=()=>{ flow().edges.splice(sel.index,1); sel=null; persist(); renderAll(); toast('Đã xóa edge'); };
+  }
+}
+
+// ===================== TOOLTIP =====================
+const tip=document.getElementById('tooltip');
+function showTip(n,e){
+  const m=TYPE_META[n.type]||TYPE_META.external;
+  tip.innerHTML=`<b>${m.icon} ${esc(n.title)}</b>
+    ${n.sub?`<span class="tt-sub">${esc(n.sub)}</span>`:''}
+    ${esc((n.desc||'').slice(0,600))}${(n.desc||'').length>600?'…':''}
+    ${(n.docs&&n.docs.length)?`<div style="margin-top:.35rem;color:#7dd3fc;font-size:.62rem">📄 ${n.docs.length} doc liên quan — click để xem</div>`:''}`;
+  tip.style.display='block'; moveTip(e);
+}
+function moveTip(e){
+  const r=tip.getBoundingClientRect();
+  let x=e.clientX+16, y=e.clientY+16;
+  if(x+r.width>innerWidth-10) x=e.clientX-r.width-14;
+  if(y+r.height>innerHeight-10) y=e.clientY-r.height-14;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){ tip.style.display='none'; }
+
+// ===================== INTERACTIONS =====================
+function onNodeClick(n){
+  if(linkMode){
+    if(!linkFrom){ linkFrom=n.id; toast('Chọn node ĐÍCH'); }
+    else{
+      if(linkFrom!==n.id){ flow().edges.push({from:linkFrom,to:n.id,label:''}); persist(); renderEdges(); toast('Đã nối edge'); }
+      linkFrom=null; linkMode=false; document.getElementById('btn-link').classList.remove('on');
+    }
+    return;
+  }
+  sel={kind:'node',id:n.id}; renderNodes(); renderEdges(); renderSide();
+}
+viewport.addEventListener('click',()=>{ if(!linkMode){sel=null; renderNodes(); renderEdges(); renderSide();} });
+
+// pan
+let panning=false, sx=0, sy=0;
+viewport.addEventListener('mousedown',e=>{ panning=true; sx=e.clientX-panX; sy=e.clientY-panY; viewport.classList.add('grabbing'); });
+addEventListener('mousemove',e=>{ if(panning){ panX=e.clientX-sx; panY=e.clientY-sy; applyT(); }});
+addEventListener('mouseup',()=>{ panning=false; viewport.classList.remove('grabbing'); });
+// zoom
+viewport.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:0.9; const ns=Math.min(2.5,Math.max(0.25,scale*f));
+  const r=viewport.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  panX=mx-(mx-panX)*(ns/scale); panY=my-(my-panY)*(ns/scale); scale=ns; applyT();
+},{passive:false});
+function applyT(){ world.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`; }
+document.getElementById('z-in').onclick=()=>{scale=Math.min(2.5,scale*1.2);applyT();};
+document.getElementById('z-out').onclick=()=>{scale=Math.max(0.25,scale/1.2);applyT();};
+document.getElementById('z-fit').onclick=()=>{
+  const f=flow(); if(!f.nodes.length) return;
+  const xs=f.nodes.map(n=>n.x), ys=f.nodes.map(n=>n.y);
+  const x0=Math.min(...xs)-40, y0=Math.min(...ys)-40;
+  const x1=Math.max(...xs)+260, y1=Math.max(...ys)+160;
+  const r=viewport.getBoundingClientRect();
+  scale=Math.min(2,Math.max(0.25,Math.min(r.width/(x1-x0),r.height/(y1-y0))));
+  panX=(r.width-(x1-x0)*scale)/2 - x0*scale; panY=(r.height-(y1-y0)*scale)/2 - y0*scale;
+  applyT();
+};
+
+// node drag
+function startNodeDrag(n,el,ev){
+  let moved=false; const ox=ev.clientX, oy=ev.clientY, nx=n.x, ny=n.y;
+  function mv(e){
+    const dx=(e.clientX-ox)/scale, dy=(e.clientY-oy)/scale;
+    if(Math.abs(e.clientX-ox)+Math.abs(e.clientY-oy)>4) moved=true;
+    if(!moved) return;
+    n.x=Math.round(nx+dx); n.y=Math.round(ny+dy);
+    el.style.left=n.x+'px'; el.style.top=n.y+'px'; renderEdges();
+  }
+  function up(){ removeEventListener('mousemove',mv); removeEventListener('mouseup',up); if(moved){persist();} }
+  addEventListener('mousemove',mv); addEventListener('mouseup',up);
+}
+
+// ===================== EDIT MODE & IO =====================
+document.getElementById('btn-edit').onclick=function(){
+  editMode=!editMode; this.classList.toggle('on',editMode);
+  document.getElementById('btn-add-node').disabled=!editMode;
+  document.getElementById('btn-link').disabled=!editMode;
+  renderSide(); toast(editMode?'✏️ Edit ON — kéo node, click để sửa':'View mode');
+};
+document.getElementById('btn-add-node').onclick=()=>{
+  const f=flow(); let i=1; while(node('node_'+i)) i++;
+  f.nodes.push({id:'node_'+i,type:'orchestrator',x:100+Math.random()*300|0,y:100+Math.random()*200|0,title:'Node mới',sub:'',desc:'',docs:[],decs:[]});
+  persist(); renderAll(); toast('Đã thêm node — click để sửa');
+};
+document.getElementById('btn-link').onclick=function(){
+  linkMode=!linkMode; linkFrom=null; this.classList.toggle('on',linkMode);
+  toast(linkMode?'🔗 Click node NGUỒN rồi node ĐÍCH':'Hủy nối');
+};
+document.getElementById('btn-export').onclick=()=>{
+  const txt='// flows-data.js — generated by Flow Studio '+new Date().toISOString()+'\nwindow.FLOW_DATA = '+JSON.stringify(DATA,null,2)+';\n';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([txt],{type:'text/javascript'}));
+  a.download='flows-data.js'; a.click();
+  toast('💾 Tải về flows-data.js — ghi đè file gốc để lưu vĩnh viễn');
+};
+document.getElementById('btn-import').onclick=()=>document.getElementById('file-import').click();
+document.getElementById('file-import').addEventListener('change',function(){
+  const f=this.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      let d;
+      if(f.name.endsWith('.json')) d=JSON.parse(rd.result);
+      else{ const m=rd.result.match(/FLOW_DATA\s*=\s*(\{[\s\S]*\})\s*;?\s*$/); d=JSON.parse(m[1]); }
+      if(!d.flows) throw new Error('thiếu flows');
+      DATA=d; curFlow=DATA.flows[0].id; sel=null; persist(); renderAll(); toast('📂 Đã nhập dữ liệu');
+    }catch(e){ toast('❌ File không hợp lệ: '+e.message); }
+  };
+  rd.readAsText(f); this.value='';
+});
+document.getElementById('btn-reset').onclick=()=>{
+  if(confirm('Xóa mọi chỉnh sửa local và về dữ liệu gốc trong flows-data.js?')){
+    localStorage.removeItem(LS_KEY); DATA=JSON.parse(JSON.stringify(window.FLOW_DATA));
+    curFlow=DATA.flows[0].id; sel=null; renderAll(); toast('↺ Đã reset');
+  }
+};
+
+// init
+applyT(); renderAll(); document.getElementById('z-fit').click();
+</script>
+</body>
+</html>

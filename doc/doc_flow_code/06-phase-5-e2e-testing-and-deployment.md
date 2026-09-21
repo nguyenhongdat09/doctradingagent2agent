@@ -20,6 +20,20 @@
   - **Toàn vẹn vòng đời:** Tất cả các chu kỳ RECOVERY phát sinh đều phải hoàn thành giải cứu và trở về `FLAT` thành công.
   - **Chống Repaint:** Không có bất kỳ truy xuất nào tới nến đang hình thành (`shift = 0`).
 
+### 1.2 Test Scenarios Cho Plan Lifecycle (v2.x — bắt buộc)
+
+Ngoài 11 kịch bản quyết định ở Phase 3, replay harness phải cover:
+
+| # | Scenario | Assert |
+|---|----------|--------|
+| P1 | Plan Chốt persist qua nhiều session | Plan ACTIVE giữ nguyên qua restart process; wake sau load đúng plan, không replan |
+| P2 | Trigger khớp → DONE → summarize → plan mới | `plan_status` chuyển đúng; `summary_text` non-null; `plan_history_summaries` inject vào planning round kế |
+| P3 | INVALIDATION trong SYSTEM_FREEZE | Giả lập LLM sập + giá chạm INVALIDATION → `CLOSE_ALL` vẫn enqueue (DEC-10) |
+| P4 | Reconcile-fail sau `InpMaxDebateRounds` vòng → fallback | Fallback plan COMMITTED kế thừa đúng INVALIDATION cũ; plan cũ = `SUPERSEDED` (DEC-13) |
+| P5 | Prune hint → replan | `prune_hint` chỉ là cờ; engine không tự sửa plan; A+B sinh plan mới COMMITTED (DEC-14) |
+| P6 | Plan TTL | `plan_age > PlanTtlDays` hoặc `d1_context_changed` → bắt buộc replan trước khi trigger (DEC-16) |
+| P7 | C3 dedupe | Nhiều wake C3 cùng nến vẫn check trigger; C0 chỉ xử lý tín hiệu 1 lần/nến (DEC-12); `trigger_event_id` idempotent |
+
 ---
 
 ## 📈 2. Giai Đoạn Chạy Thử Nghiệm Thực Tế (Forward Testing / Demo 2 Tuần)

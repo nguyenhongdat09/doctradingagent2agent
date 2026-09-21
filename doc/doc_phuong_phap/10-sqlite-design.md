@@ -17,7 +17,9 @@ Tài liệu này chi tiết hóa kiến trúc cơ sở dữ liệu SQLite cho t�
 
 ---
 
-## 2. CHI TIẾT SCHEMA 10 BẢNG DỮ LIỆU (Instance Database)
+## 2. CHI TIẾT SCHEMA 14 BẢNG DỮ LIỆU (Instance Database)
+
+> **Cấu trúc:** 10 bảng vận hành gốc + `MarketSnapshots` (2.10) + 3 bảng kiến trúc v2.x (`macro_cycles`, `micro_cycles`, `contingency_plans` — 2.11). Ngoài ra `experience.db` (dùng chung) có 4 bảng — xem `doc_experience/01`.
 
 ### 2.1. `MarketOrderInfo` (Hàng đợi lệnh chờ thực thi)
 ```sql
@@ -26,7 +28,8 @@ CREATE TABLE MarketOrderInfo (
     symbol TEXT NOT NULL,
     instance_id TEXT NOT NULL,
     plan_id TEXT UNIQUE NOT NULL,
-    action_type TEXT NOT NULL CHECK(action_type IN ('OPEN', 'DCA', 'PAYOFF', 'CLOSE_ALL', 'PARTIAL_CLOSE')),
+    -- DEC-17: enum chuẩn; WAIT không enqueue nên không nằm trong list
+    action_type TEXT NOT NULL CHECK(action_type IN ('ENTRY', 'DCA', 'RECOVERY_DCA', 'PAYOFF_REDUCE', 'CLOSE_ALL', 'PARTIAL_CLOSE')),
     direction TEXT NOT NULL CHECK(direction IN ('BUY', 'SELL', 'FLAT')),
     lot REAL NOT NULL CHECK(lot > 0),
     target_lot REAL DEFAULT 0.0,
@@ -35,7 +38,7 @@ CREATE TABLE MarketOrderInfo (
     sl REAL DEFAULT 0.0,
     reason TEXT NOT NULL,
     ballot TEXT,
-    session_mode TEXT DEFAULT 'AUTO' CHECK(session_mode IN ('AUTO', 'BOSS', 'FALLBACK')),
+    session_mode TEXT DEFAULT 'AUTO' CHECK(session_mode IN ('AUTO', 'BOSS')),
     status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'PROCESSING', 'DONE', 'FAILED', 'CANCELLED')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP,
@@ -123,7 +126,7 @@ CREATE TABLE Ballots (
     ballot_id TEXT PRIMARY KEY,
     plan_id TEXT NOT NULL REFERENCES Plans(plan_id),
     round INTEGER NOT NULL DEFAULT 1,
-    decision TEXT NOT NULL CHECK(decision IN ('APPROVE', 'REVISE', 'VETO')),
+    decision TEXT NOT NULL CHECK(decision IN ('APPROVE', 'CHALLENGE', 'VETO')),  -- DEC-17
     thesis TEXT NOT NULL,
     counter_evidence TEXT NOT NULL,
     agree_points JSON,
@@ -161,7 +164,7 @@ CREATE TABLE LLMRuns (
     run_id TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
     session_id TEXT,
-    caller TEXT NOT NULL CHECK(caller IN ('AGENT_A', 'AGENT_B', 'BOSS')),
+    caller TEXT NOT NULL CHECK(caller IN ('AGENT_A', 'AGENT_B', 'BOSS', 'WORKER')),  -- WORKER: PlanSummarizer...
     model TEXT NOT NULL,
     provider TEXT NOT NULL,
     prompt_tokens INTEGER NOT NULL DEFAULT 0,
@@ -202,7 +205,7 @@ CREATE TABLE EscalationTickets (
     context_summary     TEXT NOT NULL,                    -- Tóm tắt tình huống (tiếng Việt)
     question            TEXT NOT NULL,                    -- Câu hỏi cụ thể cho Boss (tiếng Việt)
     analysis_so_far     TEXT,                             -- JSON: {proposed_action, confidence, concerns[]}
-    snapshot_id         TEXT,                             -- FK → market_snapshots
+    snapshot_id         TEXT,                             -- FK → MarketSnapshots (§2.10)
     
     -- Trạng thái
     status              TEXT NOT NULL DEFAULT 'WAITING' 
@@ -231,10 +234,35 @@ CREATE INDEX idx_escalation_symbol ON EscalationTickets(symbol, created_at);
 
 **Lifecycle:**
 ```
-WAITING → RESPONDED      (Boss reply ≤ 30 phút)
+WAITING → RESPONDED      (Boss reply ≤ 30 phút — async, không block scheduler, DEC-15)
 WAITING → SELF_RESOLVED  (Timeout 30 phút → Agent tự quyết)
     └→ late_boss_response được ghi nếu Boss reply sau đó
 ```
+
+### 2.10. `MarketSnapshots` (Snapshot thị trường lưu vết audit)
+
+```sql
+CREATE TABLE MarketSnapshots (
+    snapshot_id TEXT PRIMARY KEY,                 -- UUID, được tham chiếu bởi EscalationTickets/plans
+    symbol TEXT NOT NULL,
+    bar_time TEXT NOT NULL,                       -- iTime H1 của nến snapshot
+    payload JSON NOT NULL,                        -- toàn bộ MarketSnapshot/DeltaMarketSnapshot JSON (04 §0/§0b)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_snapshots_symbol ON MarketSnapshots(symbol, bar_time);
+```
+
+### 2.11. Ba Bảng Kiến Trúc v2.x — `macro_cycles` / `micro_cycles` / `contingency_plans`
+
+DDL chuẩn hóa đầy đủ nằm ở **`../UPGRADE_CONTINGENCY_PLAN_SPEC.md` §5** (source of truth — không duplicate DDL ở đây để tránh diverge). Điểm bắt buộc nhắc lại:
+
+- `micro_cycles.execution_status` DEFAULT `'PENDING'` (enum `PENDING|EXECUTED|SKIPPED|FAILED`).
+- `contingency_plans.plan_status` ∈ `ACTIVE|DONE|SUPERSEDED|CANCELLED` (DEC-17); `plan_state` ∈ `PROVISIONAL|COMMITTED`.
+- `UNIQUE` partial index `WHERE is_active = TRUE` — enforce **1 plan ACTIVE / macro_cycle** ở tầng DB.
+- `contingency_plans.expires_at` = plan TTL (DEC-16, `created_at + PlanTtlDays`).
+- `macro_cycles` chỉ tạo khi ENTRY đầu tiên fill (DEC-16).
+
+**Quan hệ với `Plans`/`Ballots`/`Sessions`/`Messages` (v1):** các bảng v1 giữ vai trò **audit/transcript của các vòng debate**; `contingency_plans` là **kế hoạch đã chốt có lifecycle** — một `contingency_plans` row có thể link ngược nhiều `Sessions` debate qua `plan_id`.
 
 ---
 

@@ -76,6 +76,18 @@ Khởi động khi: FLAT (0 lệnh) -> Kết thúc khi: Lệnh clear sạch (FLA
   - Được ghi xuống Database với cờ `is_active = TRUE`.
   - **Ở chu kỳ tiếp theo:** Hệ thống **CHỈ gửi duy nhất Plan Chốt** cho các Agent. Các Agent **bị khóa quyền phân tích lại biểu đồ (No re-analysis)**, chỉ làm nhiệm vụ giám sát (Observer): Kiểm tra xem giá và nến có khớp đúng kịch bản của Plan Chốt hay không.
 
+#### Ma Trận Trạng Thái Hợp Lệ (`plan_state` × `plan_status` × `is_active`) — theo DEC-17
+
+| `plan_state` | `plan_status` | `is_active` | Ý nghĩa |
+|---|---|---|---|
+| `PROVISIONAL` | `ACTIVE` | `FALSE` | Draft đang thương lượng, không executable, không ghi DB (chỉ in-memory) |
+| `COMMITTED` | `ACTIVE` | `TRUE` | **Plan Chốt đang điều khiển** — duy nhất 1 plan/macro_cycle |
+| `COMMITTED` | `DONE` | `FALSE` | Đã khớp trigger & thực thi xong |
+| `COMMITTED` | `SUPERSEDED` | `FALSE` | Bị plan mới thay thế qua pruning/replan (DEC-13) |
+| `COMMITTED` | `CANCELLED` | `FALSE` | Bị hủy chủ động (vd Boss can thiệp) trước khi từng khớp trigger |
+
+**Escape hatch khỏi lockdown "No re-analysis"** (DEC-16): plan ACTIVE bị buộc replan khi `d1_context_changed == true` (D1 close đổi regime) hoặc `plan_age > PlanTtlDays` (default 7 ngày) hoặc Boss directive / data corruption được phát hiện — engine chỉ set cờ, quyết định replan vẫn qua A+B.
+
 ### 3.1. Cơ Chế Phản Biện & Hòa Giải (Không Cần Agent C)
 
 Thay vì bổ sung thêm Agent C (Thư ký làm tăng độ trễ và chi phí token), hệ thống sử dụng quy trình **Propose -> Challenge with Counter-Plan -> Reconcile**:
@@ -92,13 +104,19 @@ sequenceDiagram
     Sched->>Engine: Đánh thức Micro Cycle mới
     Engine->>Engine: Lấy duy nhất PLAN CHỐT (COMMITTED) gần nhất + Giá/Nến hiện tại (Delta)
 
-    alt 1. GIÁ & NẾN KHỚP VỚI TRIGGER TRONG PLAN CHỐT
+    alt 1a. KHỚP NHÁNH INVALIDATION (deterministic, DEC-10)
+        Note over Engine,Exec: Cắt lỗ khẩn cấp — KHÔNG chờ LLM, chạy cả khi SYSTEM_FREEZE
+        Engine->>Engine: HardValidator 5 checks
+        Engine->>Exec: Enqueue CLOSE_ALL ngay
+        Engine->>Engine: plan_status=DONE → PlanSummarizer → tạo Plan mới ở wake kế
+
+    else 1b. KHỚP NHÁNH UPSIDE/DOWNSIDE (Fast Consensus, DEC-10)
         Note over Engine: Không phân tích lại biểu đồ!
         Engine->>A: Báo cáo: Nến mới thỏa mãn điều kiện Price Action trong Plan Chốt
         A->>B: Đề xuất thực thi theo đúng Plan Chốt
         B-->>A: APPROVE (Xác nhận khớp đúng cam kết)
         A->>Exec: Đẩy lệnh vào Queue thực thi
-        Engine->>Engine: Cập nhật trạng thái vị thế & chuyển sang tạo Plan mới
+        Engine->>Engine: Cập nhật trạng thái vị thế & chuyển sang tạo Plan mới (wake kế tiếp, không chuỗi trong cùng cycle)
 
     else 2. GIÁ CHƯA KHỚP HOẶC BIẾN ĐỘNG PHÁ VỠ (PLAN PRUNING)
         Engine->>A: Gửi Delta Data + Plan Chốt cũ
@@ -171,6 +189,8 @@ Hệ thống **không hardcode mọi case cụ thể** của thị trường, m�
 
 Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ ghi DB khi `plan_state = "COMMITTED"`):
 
+> *(Các ví dụ giá dùng scale XAUUSD cho dễ đọc; scope production là 4 cặp forex AUDCAD/AUDNZD/GBPUSD/NZDCAD — pip/ATR scale khác, xem `doc_phuong_phap/08-parameters.md`.)*
+
 ```json
 {
   "macro_cycle_id": "MC_20260914_XAUUSD_001",
@@ -178,10 +198,13 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ
   "created_at": "2026-09-14T08:00:00Z",
   "symbol": "XAUUSD",
   "plan_state": "COMMITTED",
+  "plan_status": "ACTIVE",
+  "is_active": true,
   "current_pair_state": "NORMAL",
   "base_price": 2305.50,
   "consensus_round": 2,
   "context_trend": "UPTREND_PULLBACK",
+  "lessons_proposed": [],
   "scenarios": {
     "UPSIDE": {
       "zone": "2315.00 - 2318.00 (Kháng cự ngắn hạn)",
@@ -189,6 +212,13 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ
       "trigger_condition": {
         "price_operator": ">=",
         "price_level": 2315.00,
+        "candle_predicates": {
+          "logic": "OR",
+          "rules": [
+            {"wick_top_ratio_min": 0.4, "close_dir": "bullish"},
+            {"pattern": "BEARISH_ENGULFING"}
+          ]
+        },
         "candle_reaction": [
           "Nến H1 xanh rút râu trên dài >= 40% thân (Pinbar/Rejection)",
           "HOẶC xuất hiện cụm nến đảo chiều Bearish Engulfing đóng đỏ"
@@ -208,6 +238,13 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ
       "trigger_condition": {
         "price_operator": "<=",
         "price_level": 2298.00,
+        "candle_predicates": {
+          "logic": "AND",
+          "rules": [
+            {"wick_bottom_ratio_min": 0.4, "touch_zone": [2298.00, 2300.00]},
+            {"prev_close_dir": "bearish", "close_dir": "bullish"}
+          ]
+        },
         "candle_reaction": [
           "Nến đỏ chạm vùng rút chân tạo râu dưới dài",
           "Nến tiếp theo đóng xanh xác nhận đảo chiều"
@@ -225,6 +262,10 @@ Mỗi chu kỳ chi tiết kết thúc PHẢI sinh ra đối tượng này (chỉ
       "trigger_condition": {
         "price_operator": "<=",
         "price_level": 2290.00,
+        "candle_predicates": {
+          "logic": "AND",
+          "rules": [{"close_below": 2290.00, "body_ratio_min": 0.6}]
+        },
         "candle_reaction": ["Nến H1 đóng cửa dứt khoát dưới 2290.00 thân nến đặc"],
         "description": "Nến H1 đóng thủng hoàn toàn mốc hỗ trợ cứng 2290.00"
       },
@@ -294,13 +335,21 @@ Thay vì gửi lại 30 nến, chỉ gửi payload siêu nhẹ:
     "current_bid": 2297.80,
     "current_ask": 2298.10,
     "elapsed_since_plan_minutes": 45,
-    "latest_closed_bar": {
-      "time": "2026-09-14T08:45:00Z",
-      "o": 2301.0, "h": 2302.5, "l": 2297.5, "c": 2297.8, "v": 1520
+    "plan_age_minutes": 45,
+    "latest_closed_bars": [
+      {"time": "2026-09-14T08:45:00Z", "o": 2301.0, "h": 2302.5, "l": 2297.5, "c": 2297.8, "v": 1520},
+      {"time": "2026-09-14T07:45:00Z", "o": 2303.2, "h": 2304.0, "l": 2300.8, "c": 2301.0, "v": 1390},
+      {"time": "2026-09-14T06:45:00Z", "o": 2304.5, "h": 2305.1, "l": 2302.9, "c": 2303.2, "v": 1410}
+    ],
+    "flags": {
+      "prune_hint": false,
+      "d1_context_changed": false,
+      "plan_expired": false
     },
     "trigger_precheck": {
       "matched_scenario": "DOWNSIDE",
-      "rule_hit": "price <= 2298.00"
+      "rule_hit": "price <= 2298.00",
+      "candle_predicates_passed": true
     }
   },
   "current_positions": [
@@ -313,13 +362,15 @@ Thay vì gửi lại 30 nến, chỉ gửi payload siêu nhẹ:
 
 ## 5. Thiết Kế Cơ Sở Dữ Liệu (Database Schema)
 
-Dưới đây là DDL chuẩn hóa cho SQLite / PostgreSQL:
+Ba bảng dưới nằm trong **`dca_<symbol>.db`** (database vận hành riêng từng cặp — macro/micro/plan là dữ liệu theo cặp, không share). DDL chuẩn hóa SQLite / PostgreSQL:
 
 ```sql
 -- 1. Bảng Chu kỳ tổng (Chiến dịch giao dịch)
+-- LƯU Ý (DEC-16): macro_cycle CHỈ được tạo khi ENTRY đầu tiên fill thực sự,
+-- KHÔNG tạo khi còn FLAT chỉ vì có plan STANDBY -> tránh macro cycle treo vĩnh viễn.
 CREATE TABLE macro_cycles (
-    macro_cycle_id VARCHAR(64) PRIMARY KEY,     -- Ví dụ: MC_20260914_XAUUSD_001
-    symbol VARCHAR(16) NOT NULL,                -- XAUUSD, AUDCAD...
+    macro_cycle_id VARCHAR(64) PRIMARY KEY,     -- Ví dụ: MC_20260914_AUDCAD_001
+    symbol VARCHAR(16) NOT NULL,                -- AUDCAD, AUDNZD, GBPUSD, NZDCAD
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'OPEN', -- OPEN, CLOSED
@@ -342,7 +393,7 @@ CREATE TABLE micro_cycles (
     matched_scenario VARCHAR(32) NULL,          -- UPSIDE, DOWNSIDE, INVALIDATION, STANDBY, NONE
     action_taken VARCHAR(32) NOT NULL,          -- ENTRY, DCA, CLOSE_ALL, WAIT, REPLAN
     order_ticket INT NULL,
-    execution_status VARCHAR(16) DEFAULT 'DONE',-- PENDING, EXECUTED, SKIPPED, FAILED
+    execution_status VARCHAR(16) DEFAULT 'PENDING',-- PENDING, EXECUTED, SKIPPED, FAILED
     PRIMARY KEY (macro_cycle_id, micro_cycle_id),
     FOREIGN KEY (macro_cycle_id) REFERENCES macro_cycles(macro_cycle_id) ON DELETE CASCADE
 );
@@ -353,10 +404,11 @@ CREATE TABLE contingency_plans (
     macro_cycle_id VARCHAR(64) NOT NULL,
     micro_cycle_id INT NOT NULL,
     created_at TIMESTAMP NOT NULL,
-    plan_state VARCHAR(16) NOT NULL DEFAULT 'COMMITTED', -- COMMITTED (chính thức), PROVISIONAL (tạm thời)
-    plan_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',    -- ACTIVE (đang chạy/chờ), DONE (đã thực thi xong), CANCELLED (hủy)
+    plan_state VARCHAR(16) NOT NULL DEFAULT 'COMMITTED' CHECK(plan_state IN ('PROVISIONAL','COMMITTED')),
+    plan_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' CHECK(plan_status IN ('ACTIVE','DONE','SUPERSEDED','CANCELLED')),
     base_price DECIMAL(12, 5) NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,             -- Chỉ 1 plan là ACTIVE cho mỗi macro_cycle
+    is_active BOOLEAN DEFAULT TRUE,             -- Chỉ 1 plan ACTIVE/macro_cycle (enforce bởi unique index dưới)
+    expires_at TIMESTAMP NULL,                  -- DEC-16: plan TTL (created_at + PlanTtlDays); quá hạn → bắt buộc replan
     executed_at TIMESTAMP NULL,                 -- Thời điểm khớp lệnh hoặc thực thi hành động
     execution_notes TEXT NULL,                  -- Chi tiết lệnh: ticket, lot, giá thực tế, SL mới
     summary_text TEXT NULL,                     -- Bản tóm tắt 2-3 dòng do PlanSummarizer đúc kết khi plan DONE
@@ -367,6 +419,11 @@ CREATE TABLE contingency_plans (
 );
 
 CREATE INDEX idx_active_plan ON contingency_plans(macro_cycle_id, is_active, plan_status);
+-- DEC-17: enforce "1 plan ACTIVE duy nhất / macro_cycle" ở tầng DB
+-- (SQLite/Postgres đều hỗ trợ partial unique index)
+CREATE UNIQUE INDEX uq_one_active_plan_per_macro
+    ON contingency_plans(macro_cycle_id)
+    WHERE is_active = TRUE;
 ```
 
 
@@ -376,13 +433,21 @@ CREATE INDEX idx_active_plan ON contingency_plans(macro_cycle_id, is_active, pla
 
 ### Bước 1: Khởi động Micro Cycle mới
 - Kiểm tra trạng thái tài khoản:
-  - Nếu số lệnh mở = 0 và không có `macro_cycle` nào đang `OPEN` -> Khởi tạo `macro_cycle` mới.
-  - Lấy `Active Plan` từ bảng `contingency_plans` (nơi `is_active = TRUE`).
+  - **DEC-16:** `macro_cycle` CHỈ được tạo khi **ENTRY đầu tiên fill thực sự** (không tạo sẵn khi còn FLAT chỉ vì có plan). Nếu chưa có macro OPEN → vẫn lập plan nhưng `macro_cycle_id` ở dạng "pre-campaign" cho tới khi có fill đầu.
+  - Lấy `Active Plan` từ bảng `contingency_plans` (nơi `is_active = TRUE`); kiểm tra `expires_at`/`d1_context_changed` → quá hạn hoặc đổi regime thì set cờ bắt buộc replan.
 
 ### Bước 2: Bộ lọc kích hoạt trước (Deterministic Pre-Trigger Filter)
-- Code Python tự so khớp `current_price` với `active_plan.scenarios`:
-  - Nếu chạm mốc `INVALIDATION` -> Kích hoạt ngay lệnh cắt lỗ khẩn cấp, không cần đợi LLM "suy nghĩ".
-  - Nếu chạm mốc `DOWNSIDE` (DCA) hoặc `UPSIDE` (TP) -> Tạo payload tóm tắt gửi A & B xác nhận 1 vòng (Fast Consensus).
+- Code Python tự so khớp `current_price` + `candle_predicates` với `active_plan.scenarios`. **Phân quyền theo DEC-10:**
+
+| Nhánh khớp | Ai quyết định | Ghi chú |
+|---|---|---|
+| `INVALIDATION` | **Deterministic auto-execute** — không chờ LLM, chạy cả khi `SYSTEM_FREEZE` | Vẫn qua HardValidator + Executor; consent đã ký lúc commit plan |
+| `UPSIDE` / `DOWNSIDE` (ENTRY/DCA/TP) | **Fast Consensus** A→B 1 vòng xác nhận khớp đúng cam kết → HardValidator → enqueue | Không phân tích lại biểu đồ |
+| `STANDBY` / không khớp | Không action — engine chỉ ghi `micro_cycle` + set `next_wake` | Không gọi LLM |
+| Giá vượt xa mọi nhánh / `prune_hint` | Flag `prune_hint` → cycle replan A+B (DEC-14) | Engine KHÔNG tự sửa plan |
+
+- **Sau khi execute thành công:** plan hiện tại → `DONE`, PlanSummarizer chạy; **plan mới được lập ở micro cycle (wake) kế tiếp** chứ không chuỗi full planning ngay trong cycle đang chạy (tránh 1 wake làm 2 việc, giữ latency của nhánh thực thi độc lập).
+- **Reconcile-fail sau `InpMaxDebateRounds` vòng (DEC-13):** plan fallback tối thiểu phải **kế thừa `INVALIDATION` + kịch bản bảo vệ vị thế** của plan trước — không bao giờ để rổ lệnh "trần" không có stop bảo vệ. Plan bị thay thế → `SUPERSEDED`.
 
 ### Bước 3: Cơ chế Reconcile (Hòa giải) khi cần tạo Plan mới
 - Prompt Agent A: Yêu cầu trả về JSON có cấu trúc đầy đủ `scenarios: { UPSIDE, DOWNSIDE, INVALIDATION, STANDBY }`.
@@ -396,7 +461,9 @@ CREATE INDEX idx_active_plan ON contingency_plans(macro_cycle_id, is_active, pla
 
 | Mục tiêu | Trước nâng cấp | Sau nâng cấp |
 | :--- | :--- | :--- |
-| **Token tiêu thụ / chu kỳ** | ~4,000 - 6,000 tokens (load 30-50 nến) | **~800 - 1,500 tokens** (chỉ nạp Plan + Delta) |
-| **Độ trễ phản hồi** | 8 - 15 giây / cycle | **1 - 3 giây** (nhiều cycle khớp trigger chạy thẳng không cần LLM) |
+| **Token tiêu thụ / chu kỳ** | ~4,000 - 6,000 tokens (load 30-50 nến) | Monitoring cycle (không khớp/STANDBY): **~0 token LLM** (engine tự check). Fast-consensus: ~800–1,500. Planning cycle đầy đủ: ~3,500–5,500 |
+| **Độ trễ phản hồi** | 8 - 15 giây / cycle | INVALIDATION/STANDBY: **1–3s không LLM**. UPSIDE/DOWNSIDE: fast-consensus ~3–8s. Replan: như planning cycle cũ |
 | **Tính nhất quán** | Dễ bị nhiễu do từng nến M15/H1 | Kỷ luật thép: Hành động định trước theo mốc giá cụ thể |
 | **Độ phức tạp nhân sự Agent** | Cần thêm Agent C để làm thư ký | **A & B tự điều đình**, không tốn chi phí phát triển Agent C |
+
+> **Lưu ý cost-model (DEC-10):** con số "70–80% tiết kiệm" chỉ đạt được nếu phần lớn wake rơi vào STANDBY/monitoring. Mỗi lần khớp UPSIDE/DOWNSIDE vẫn tốn fast-consensus + 1 planning round ở wake kế. Ước lượng thực tế phụ thuộc tần suất trigger — xem bảng cost trong `doc_agents/14-llm-prompt-spec.md`.

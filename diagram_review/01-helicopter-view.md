@@ -1,6 +1,6 @@
 # 01 - GIẢI THÍCH TOÀN CẢNH HỆ THỐNG (HELICOPTER VIEW)
 
-> **File sơ đồ Mermaid tương ứng**: [01-helicopter-view.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/01-helicopter-view.mmd)
+> **File sơ đồ Mermaid tương ứng**: [01-helicopter-view.mmd](01-helicopter-view.mmd)
 
 ---
 

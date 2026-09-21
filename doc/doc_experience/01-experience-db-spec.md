@@ -13,6 +13,7 @@ Tài liệu này đặc tả chi tiết kiến trúc của **EXPERIENCE DB** (`e
    - Tách biệt hoàn toàn khỏi database vận hành từng cặp (`dca_<symbol>.db`).
    - Mọi instance cặp tiền (`AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`) đều đọc/ghi vào `experience.db`.
    - Có cột `symbol` và `scope` (`symbol` | `group` | `all`) để chia sẻ bài học giữa các cặp có đặc tính tương đồng.
+   - **`scope='group'` resolve qua registry nhóm cặp** khai báo trong `config/symbols.yaml` (vd `aud_block: [AUDCAD, AUDNZD]`, `cad_quote: [AUDCAD, NZDCAD]`). Retrieval v1: lesson `scope='group'` áp cho mọi symbol cùng nhóm với symbol gốc của lesson. Nếu symbol không thuộc nhóm nào → group lessons không match.
 3. **Cơ Chế Nạp Nhanh Qua Cache (MemoryPack):**
    - Trước mỗi quyết định, Agent A và B nạp **MemoryPack** — một chuỗi text cô đọng ($\le 500$ tokens) đã được render và lưu sẵn trong bộ nhớ đệm (`MemoryCache`), loại bỏ hoàn toàn việc quét lại toàn bộ bảng lịch sử.
 4. **Tính Chất Khuyến Nghị (Advisory Nature):**
@@ -39,10 +40,12 @@ CREATE TABLE Lessons (
     direction TEXT NOT NULL DEFAULT 'NONE' CHECK(direction IN ('BUY', 'SELL', 'NONE')),
     lesson_type TEXT NOT NULL CHECK(lesson_type IN ('AVOID', 'PREFER', 'WARNING')),
     severity INTEGER NOT NULL DEFAULT 3 CHECK(severity BETWEEN 1 AND 5), -- 1: Nhẹ, 5: Nghiêm trọng
-    trigger_cond TEXT,                   -- Chuỗi JSON chữ ký điều kiện nén (vd: {"streak":4,"near_d1_wall":1})
+    trigger_cond TEXT,                   -- JSON chữ ký điều kiện nén (vd: {"streak":4,"near_d1_wall":1}).
+                                         -- Dùng trong dedupe hash + agent đọc như text advisory.
+                                         -- KHÔNG machine-match trong scoring v1; backend v2 (judge) có thể chấm từng predicate.
     lesson_text TEXT NOT NULL,           -- Câu template chuẩn hóa (<= 200 ký tự)
     tags TEXT DEFAULT '[]',              -- Mảng JSON phân loại (vd: ["streak", "exhaustion", "support"])
-    src TEXT NOT NULL DEFAULT 'agent' CHECK(src IN ('agent_a', 'agent_b', 'system', 'boss')),
+    src TEXT NOT NULL DEFAULT 'system' CHECK(src IN ('agent_a', 'agent_b', 'system', 'boss', 'manual', 'import')),  -- DEC-17: default phải thuộc enum
     plan_id TEXT,                        -- ID kế hoạch phát sinh bài học
     occurrence_count INTEGER NOT NULL DEFAULT 1,
     total_pl_usd REAL NOT NULL DEFAULT 0.0,
@@ -92,6 +95,8 @@ CREATE TABLE LessonFeedback (
     applied INTEGER NOT NULL DEFAULT 0 CHECK(applied IN (0, 1)),
     outcome TEXT NOT NULL DEFAULT 'NA' CHECK(outcome IN ('WIN', 'LOSS', 'FLAT', 'NA')),
     pl_usd REAL DEFAULT 0.0,
+    retrieval_score REAL,                -- DEC-18: điểm relevance backend trả về (v1=formula score, v2=judge prob)
+    retrieval_rank INTEGER,              -- Thứ hạng trong batch candidates lúc được chọn
     note TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -150,6 +155,10 @@ Trong đó:
 
 ## 5. CƠ CHẾ DEDUPLICATION & VÒNG ĐỜI HỌC HỎI
 
+0. **Write path rõ ràng (DEC-18):**
+   - Agent A/B **không ghi DB trực tiếp**. Output `UnifiedContingencyPlan`/`Ballot` chứa field `lessons_proposed[]` (schema: `doc_agents/04-message-schemas.md`) — mỗi phần tử là lesson candidate `{lesson_type, context_type, action_type, direction, trigger_cond, lesson_text, severity}`.
+   - Orchestrator trích `lessons_proposed` sau mỗi consensus cycle và gọi `lesson_writer.record_lesson(candidate, caller='consensus')`. Boss/manual đi cùng cửa (`caller='boss'|'manual'`).
+   - **LessonWriter là single-writer duy nhất** chạm `Lessons` + `MemoryCache` invalidation.
 1. **Ghi nhận bài học theo đợt (Batch Learning Triggers):**
    - Chỉ kích hoạt trích xuất bài học khi:
      - Đóng rổ lệnh thành công (`CLOSE_ALL` / Normal TP).

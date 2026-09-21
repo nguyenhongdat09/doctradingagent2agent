@@ -1,5 +1,6 @@
 %% D09-er-diagram.mmd
-%% ER Diagram: 8 bảng cơ sở dữ liệu SQLite dca_<symbol>.db
+%% ER Diagram: 14 bảng cơ sở dữ liệu SQLite dca_<symbol>.db (v2.3)
+%% = 10 vận hành + MarketSnapshots + 3 bảng v2.x (macro_cycles, micro_cycles, contingency_plans)
 erDiagram
     MarketOrderInfo {
         INTEGER id PK
@@ -127,7 +128,64 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    EscalationTickets {
+        TEXT ticket_id PK
+        TEXT symbol
+        TEXT snapshot_id FK
+        TEXT category
+        TEXT question
+        TEXT status
+        TEXT boss_reply
+        TIMESTAMP created_at
+        TIMESTAMP resolved_at
+    }
+
+    MarketSnapshots {
+        TEXT snapshot_id PK
+        TEXT symbol
+        TEXT bar_id
+        TEXT payload
+        TIMESTAMP created_at
+    }
+
+    %% ===== v2.x: Unified Contingency Plan lifecycle =====
+    macro_cycles {
+        TEXT macro_cycle_id PK
+        TEXT symbol
+        TEXT status
+        TIMESTAMP opened_at
+        TIMESTAMP closed_at
+    }
+
+    micro_cycles {
+        TEXT micro_cycle_id PK
+        TEXT macro_cycle_id FK
+        TEXT bar_id
+        TEXT wake_type
+        TEXT trigger_event_id
+        TIMESTAMP started_at
+    }
+
+    contingency_plans {
+        TEXT plan_id PK
+        TEXT macro_cycle_id FK
+        TEXT micro_cycle_id FK
+        TEXT symbol
+        TEXT plan_state
+        TEXT plan_status
+        INTEGER is_active
+        TEXT scenarios
+        TEXT summary_text
+        TEXT prune_hint
+        TIMESTAMP expires_at
+        TIMESTAMP created_at
+    }
+
     Plans ||--o{ Ballots : "được thẩm định bởi"
     Sessions ||--o{ Messages : "chứa các"
     Plans ||--o| MarketOrderInfo : "sinh ra lệnh"
     Plans ||--o{ AuditLog : "ghi nhận trong"
+    macro_cycles ||--o{ micro_cycles : "gồm các"
+    macro_cycles ||--o{ contingency_plans : "kẹp các plan chốt"
+    micro_cycles ||--o{ contingency_plans : "sinh ra"
+    EscalationTickets }o--|| MarketSnapshots : "kèm snapshot"

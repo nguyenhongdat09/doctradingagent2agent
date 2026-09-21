@@ -1,6 +1,6 @@
 # 12 - SƠ ĐỒ LUỒNG DỮ LIỆU VÀ QUAN HỆ 13 BẢNG SQLITE (DATAFLOW & SCHEMA)
 
-> **File sơ đồ Mermaid tương ứng**: [12-dataflow-overview.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/12-dataflow-overview.mmd)
+> **File sơ đồ Mermaid tương ứng**: [12-dataflow-overview.mmd](12-dataflow-overview.mmd)
 
 ---
 
@@ -10,8 +10,8 @@ Hệ thống phân tách rành mạch giữa **dữ liệu cục bộ của từ
 
 ```
 D:\TradingAgents\PlanToCode\data\
-├── dca_audcad.db         <── Database riêng của cặp AUDCAD (9 bảng)
-├── dca_audnzd.db         <── Database riêng của cặp AUDNZD (9 bảng)
+├── dca_audcad.db         <── Database riêng của cặp AUDCAD (14 bảng — v2.3)
+├── dca_audnzd.db         <── Database riêng của cặp AUDNZD (14 bảng)
 └── experience.db         <── Database dùng chung toàn hệ thống (4 bảng)
 ```
 
@@ -25,7 +25,7 @@ D:\TradingAgents\PlanToCode\data\
 | **`MarketOrderInfo`** | Hàng đợi lệnh bất đồng bộ: `status` (PENDING, PROCESSING, FAILED), `action`, `lot_size`, `price`. |
 | **`open_orders`** | Danh sách các vị thế thực tế đang chạy trên MT5 (Ticket ID, open_price, volume, sl, tp). |
 | **`order_archive`** | Lịch sử toàn bộ các lệnh đã đóng để phục vụ phân tích P&L và thống kê hiệu suất. |
-| **`market_snapshots`** | Lưu trữ cache các bản tin snapshot nến D1/H1 giúp kiểm tra và debug khi cần. |
+| **`MarketSnapshots`** | Lưu trữ cache các bản tin snapshot nến D1/H1 giúp kiểm tra và debug khi cần (canonical: `doc_phuong_phap/10-sqlite-design.md` §2.10). |
 | **`trade_plans`** | Lưu vết toàn bộ các kế hoạch do Agent A đề xuất qua từng phiên. |
 | **`review_ballots`** | Lưu vết các lá phiếu đánh giá và phản biện của Agent B. |
 | **`system_flags`** | Lưu các cờ điều khiển: `SYSTEM_FREEZE`, `MAINTENANCE_MODE`, `RECONCILE_REQUIRED`. |

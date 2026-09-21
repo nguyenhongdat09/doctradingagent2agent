@@ -15,14 +15,15 @@
     2. **C1 / C2 (Bổ trợ khi FLAT):** Wake giữa nến sau mỗi 30 phút để kiểm tra tình hình.
     3. **C3 (Khi NORMAL / RECOVERY):** Thức theo chu kỳ động `interval` do Agent A chỉ định ($3\text{m} \le interval \le 60\text{m}$).
        - **Quy tắc Timing DCA (DEC-09):** Ở **MỖI LẦN WAKE C3**, nếu cờ `spacing_met == true`, kích hoạt Agent A và B đánh giá và ra quyết định DCA ngay giữa nến mà **KHÔNG cần chờ nến H1 đóng**.
-  - **Chống xử lý lặp nến (`last_processed_bar_id`):** Lưu thời gian mở nến H1 hiện tại vào `PairState.last_processed_bar_id`. Nếu nến H1 đã được xử lý tín hiệu thì bỏ qua.
+  - **Chống xử lý lặp nến (`last_processed_bar_id` — DEC-12):** Lưu thời gian mở nến H1 hiện tại vào `PairState.last_processed_bar_id`. Dedupe này **chỉ áp cho bước xử lý tín hiệu H1-close (C0)** — wake C3 intra-bar trong cùng nến vẫn chạy trigger-check/DCA đúng DEC-09. Dedupe trigger/plan-execution dùng `trigger_event_id = f"{plan_id}:{scenario}:{bar_id}"` (idempotent).
 
 ### Module 4.2: Freeze Monitor & Auto-Resume (`src/orchestrator/freeze_monitor.py`)
 - **Nhiệm vụ:**
   - **Giám sát LLM Outage:**
     - Theo dõi các cuộc gọi LLM API. Nếu gặp Timeout $> 30\text{s}$, lỗi 5xx, hoặc Rate limit quá số lần retry cho phép:
       1. Bật cờ toàn cục `SYSTEM_FREEZE = true`.
-      2. Đóng băng mọi hành vi giao dịch (Engine KHÔNG tự ra lệnh; Executor không nhận lệnh mới).
+      2. Đóng băng mọi hành vi **quyết định mới** (Engine KHÔNG tự ra lệnh; Executor không nhận lệnh mới).
+         - **Ngoại lệ (DEC-10):** nhánh `INVALIDATION` của Plan Chốt COMMITTED **vẫn auto-execute khi FREEZE** — đây là thực thi consent đã ký, không phải quyết định mới. InvalidationWatcher (Module 4.8) phải chạy độc lập với LLM.
       3. Giữ nguyên toàn bộ các lệnh đang mở (PairState không đổi).
       4. Phát cảnh báo khẩn cấp `ALERT_LLM_OUTAGE` tới Boss kèm snapshot trạng thái các vị thế.
   - **Cơ chế Auto-Resume & Light Reconcile:**
@@ -47,9 +48,10 @@
     1. Mở kết nối SQLite database riêng của symbol (`data/dca_<symbol>.db`) + `experience.db`.
     2. Khởi tạo kết nối MT5 Terminal (`mt5.initialize()`, `mt5.login()`).
     3. Chạy `full_reconcile(symbol)`.
-    4. Nạp đủ dữ liệu nến khởi động (**Warm-up data:** 60 nến D1 + 30 nến H1).
-    5. Khởi chạy Executor Thread chạy nền.
-    6. Trả về trạng thái sẵn sàng cho Main Runner.
+    4. **Restore Plan Context (v2.x):** nạp `macro_cycle` OPEN (nếu có) + `Active Plan` (`is_active=TRUE`) + `plan_history_summaries` — agents resume đúng plan đang chạy, không phân tích lại từ đầu. Nếu DB crash giữa chừng mà không có active plan → A+B lập fallback plan kế thừa INVALIDATION (DEC-13).
+    5. Nạp đủ dữ liệu nến khởi động (**Warm-up data:** 60 nến D1 + 30 nến H1).
+    6. Khởi chạy Executor Thread chạy nền.
+    7. Trả về trạng thái sẵn sàng cho Main Runner.
 
 ### Module 4.5: Monitoring Phase 1 (`src/orchestrator/monitoring.py`)
 - **Nhiệm vụ:**
@@ -83,6 +85,17 @@
   - **Readers-Only:** Các tiến trình con của từng cặp tiền (`AUDCAD`, `AUDNZD`, etc.) **CHỈ ĐỌC** qua hàm `get_memory_pack()` và đọc bảng `MemoryCache`.
   - Điều này loại bỏ 100% nguy cơ xảy ra SQLite Database Lock (`SQLITE_BUSY`) khi 4 process instance chạy song song.
 
+### Module 4.8: Pre-Trigger Filter & Plan Lifecycle (`src/orchestrator/plan_gate.py`) — v2.x
+- **Nhiệm vụ (deterministic, chạy mọi wake trước khi gọi LLM):**
+  - Nạp `Active Plan` + giá hiện tại + `latest_bars`; so khớp `price_*` + `candle_predicates` (DEC-11) với từng scenario.
+  - **Bảng phân quyền (DEC-10):**
+    - Khớp `INVALIDATION` → enqueue `CLOSE_ALL` ngay (không LLM, chạy cả khi `SYSTEM_FREEZE`) → plan `DONE` → trigger PlanSummarizer.
+    - Khớp `UPSIDE`/`DOWNSIDE` → đánh dấu `matched_scenario` → đẩy Fast Consensus A→B.
+    - `STANDBY`/không khớp → không gọi LLM; set wake kế.
+    - Giá phá xa mọi nhánh → set `prune_hint=true` → cycle replan A+B (engine không tự sửa plan, DEC-14).
+  - Check `plan_expired` (`expires_at`) / `d1_context_changed` → bắt buộc replan (DEC-16).
+- **Idempotency:** `trigger_event_id = f"{plan_id}:{scenario}:{bar_id}"` — trigger đã EXECUTING/DONE thì skip.
+
 ---
 
 ## ✅ 2. Checklist Developer — Phase 4
@@ -92,7 +105,9 @@
 - [ ] **Chống trùng nến:** Kiểm tra `last_processed_bar_id` ngăn chặn phân tích 2 lần trên cùng một nến H1.
 - [ ] **SYSTEM_FREEZE:** Thử ngắt mạng / mock lỗi LLM 500 $\rightarrow$ Hệ thống lập tức freeze, không tự ý vào lệnh, phát alert Boss.
 - [ ] **Auto-Resume & Light Reconcile:** Khôi phục mạng $\rightarrow$ Tự động resume, chạy Light Reconcile khớp số lot thực tế rồi mới chạy tiếp.
-- [ ] **Full Reconcile Khi Boot:** Giả lập crash khi đang có lệnh $\rightarrow$ Khởi động lại, hệ thống nhận diện đúng trạng thái từ MT5, dọn sạch orphan queue.
+- [ ] **Full Reconcile Khi Boot:** Giả lập crash khi đang có lệnh $\rightarrow$ Khởi động lại, hệ thống nhận diện đúng trạng thái từ MT5, dọn sạch orphan queue, **restore Active Plan + plan_history_summaries**.
+- [ ] **Pre-Trigger Filter:** Khớp INVALIDATION → enqueue ngay không LLM (kể cả khi FREEZE); khớp UPSIDE/DOWNSIDE → fast-consensus; STANDBY → không gọi LLM; `trigger_event_id` idempotent.
+- [ ] **Plan TTL/Replan:** `expires_at` quá hạn hoặc `d1_context_changed` → bắt buộc replan (DEC-16).
 
 ---
 

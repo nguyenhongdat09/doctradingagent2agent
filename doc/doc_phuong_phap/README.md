@@ -2,9 +2,9 @@
 
 Bộ đặc tả kiến trúc phương pháp và nghiệp vụ giao dịch cho **Trading Agent DCA tự động** trên MetaTrader 5 / Python, vận hành đa cặp độc lập: `AUDCAD`, `AUDNZD`, `GBPUSD`, `NZDCAD`.
 
-> **Bản cập nhật chính thức:** Thay thế toàn bộ các phiên bản trước.  
+> **Bản cập nhật chính thức:** Thay thế toàn bộ các phiên bản trước. **Phiên bản áp dụng: v2.3** (Macro/Micro Cycle + Plan Chốt — xem `../UPGRADE_CONTINGENCY_PLAN_SPEC.md` & `../ERRATA.md` DEC-10..18).  
 > **Nền tảng:** Python Engine (Mắt + Executor) + MetaTrader 5 API + LLM Agents (Não) + SQLite.
-> **Nguyên tắc ALL-LLM:** MỌI action giao dịch qua Agent A+B consensus. Engine chỉ cung cấp dữ liệu. Xem [ERRATA](../ERRATA.md).
+> **Nguyên tắc ALL-LLM:** MỌI action giao dịch qua Agent A+B consensus. Engine chỉ cung cấp dữ liệu. Ngoại lệ duy nhất: INVALIDATION trigger của Plan Chốt (DEC-10). Xem [ERRATA](../ERRATA.md).
 
 ---
 
@@ -22,7 +22,7 @@ Bộ đặc tả kiến trúc phương pháp và nghiệp vụ giao dịch cho *
 | [07-recovery-loop.md](07-recovery-loop.md) | Vòng lặp RECOVERY (adverse DCA / favorable payoff reduce) |
 | [08-parameters.md](08-parameters.md) | Bảng tham số + default + validation rules |
 | [09-data-sources.md](09-data-sources.md) | Nguồn dữ liệu (nến, snapshot, engines, account) |
-| [10-sqlite-design.md](10-sqlite-design.md) | DB schema: 8 bảng, cột, CHECK, index, pragma, claim atomic, archive transaction |
+| [10-sqlite-design.md](10-sqlite-design.md) | DB schema: 14 bảng (10 vận hành + MarketSnapshots + 3 bảng v2.x macro/micro/contingency_plans), cột, CHECK, index, pragma, claim atomic, archive transaction |
 | [11-python-engine-notes.md](11-python-engine-notes.md) | Kiến trúc Python: mắt engine (data only), tools cho agents, executor thread, runtime lifecycle |
 | [12-operations-reliability.md](12-operations-reliability.md) | **[NEW]** Error handling, startup/reconciliation, SYSTEM_FREEZE, monitoring Phase 1 |
 | [13-testing-strategy.md](13-testing-strategy.md) | **[NEW]** Unit/integration/LLM decision/scenario/forward test strategy |
@@ -41,4 +41,4 @@ Bộ đặc tả kiến trúc phương pháp và nghiệp vụ giao dịch cho *
 | [diagrams/D06-h1-strength-pipeline.mmd](diagrams/D06-h1-strength-pipeline.mmd) | flowchart TD | Pipeline H1: Strength Score → LLM → Rails → Matrix |
 | [diagrams/D07-instance-architecture.mmd](diagrams/D07-instance-architecture.mmd) | flowchart TB | Kiến trúc 1 Instance (Python Engine ↔ Agents ↔ SQLite ↔ Executor ↔ MT5) |
 | [diagrams/D08-decision-sequence.mmd](diagrams/D08-decision-sequence.mmd) | sequenceDiagram | Vòng đời quyết định: H1 close → Snapshot → A/B → Rails → Order Queue → MT5 |
-| [diagrams/D09-er-diagram.mmd](diagrams/D09-er-diagram.mmd) | erDiagram | Schema 8 bảng Database SQLite `dca_<symbol>.db` |
+| [diagrams/D09-er-diagram.mmd](diagrams/D09-er-diagram.mmd) | erDiagram | Schema 14 bảng Database SQLite `dca_<symbol>.db` (v2.3: gồm `MarketSnapshots` + 3 bảng plan) |

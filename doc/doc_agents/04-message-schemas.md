@@ -79,10 +79,17 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "current_bid": 0.8952,
   "current_ask": 0.8954,
   "elapsed_minutes": 30,
-  "latest_bar": {"t": 1718000000, "o": 0.8945, "h": 0.8955, "l": 0.8942, "c": 0.8953, "v": 450},
+  "plan_age_minutes": 1440,
+  "latest_bars": [
+    {"t": 1718000000, "o": 0.8945, "h": 0.8955, "l": 0.8942, "c": 0.8953, "v": 450},
+    {"t": 1717996400, "o": 0.8940, "h": 0.8948, "l": 0.8938, "c": 0.8945, "v": 430},
+    {"t": 1717992800, "o": 0.8937, "h": 0.8944, "l": 0.8935, "c": 0.8940, "v": 415}
+  ],
+  "flags": {"prune_hint": false, "d1_context_changed": false, "plan_expired": false},
   "trigger_check": {
     "hit_scenario": "NONE|UPSIDE|DOWNSIDE|INVALIDATION",
-    "matched_condition": "string"
+    "matched_condition": "string",
+    "candle_predicates_passed": true
   },
   "basket": {
     "total_lot": 0.05,
@@ -110,7 +117,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
     {
       "plan_id": "PLAN_001",
       "micro_cycle_id": 1,
-      "plan_status": "EXECUTED",
+      "plan_status": "DONE",
       "action_taken": "ENTRY BUY 0.05 lot @ 0.8950",
       "executed_at": "ISO-8601",
       "rationale": "D1 UPTREND, H1 ép giá chạm hỗ trợ EMA200 hãm lực nến rút râu."
@@ -140,7 +147,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
 {
   "ballot_id": "uuid",
   "plan_id": "uuid",
-  "decision": "APPROVE|REJECT|CHALLENGE|INVALID",
+  "decision": "APPROVE|CHALLENGE|VETO",
   "thesis": "string",
   "counter_evidence": "string — BẮT BUỘC nếu muốn APPROVE hợp lệ",
   "agree_points": ["..."],
@@ -167,9 +174,12 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
   "created_at": "ISO-8601",
   "symbol": "AUDCAD",
   "plan_state": "PROVISIONAL|COMMITTED",
-  "plan_status": "ACTIVE|EXECUTED|CANCELLED",
+  "plan_status": "ACTIVE|DONE|SUPERSEDED|CANCELLED",
+  "is_active": true,
+  "expires_at": "ISO-8601|null — DEC-16 plan TTL",
   "executed_at": "ISO-8601|null",
   "execution_notes": "string|null",
+  "lessons_proposed": ["string — tối đa 3, template AVOID|PREFER|WARNING (DEC-18)"],
   "base_price": 0.8950,
   "context_trend": "UPTREND_PULLBACK|DOWNTREND_PULLBACK|SIDEWAY_BOUNDARY",
   "scenarios": {
@@ -178,6 +188,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
       "approach_momentum": "WEAKENING|STRONG|EXHAUSTION",
       "trigger_condition": {
         "price_level": 0.8980,
+        "candle_predicates": {"logic": "OR", "rules": [{"wick_top_ratio_min": 0.4}, {"pattern": "BEARISH_ENGULFING"}]},
         "candle_reaction": [
           "Nến H1 rút râu trên >= 40% thân nến",
           "HOẶC xuất hiện cụm nến đảo chiều đỏ (Bearish Engulfing)"
@@ -192,6 +203,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
       "approach_momentum": "EXHAUSTION",
       "trigger_condition": {
         "price_level": 0.8920,
+        "candle_predicates": {"logic": "AND", "rules": [{"wick_bottom_ratio_min": 0.4}, {"close_dir": "bullish"}]},
         "candle_reaction": [
           "Nến đỏ chạm hỗ trợ rút chân râu dưới dài",
           "Nến tiếp theo đóng xanh xác nhận đảo chiều"
@@ -204,6 +216,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
     "INVALIDATION": {
       "trigger_condition": {
         "price_level": 0.8880,
+        "candle_predicates": {"logic": "AND", "rules": [{"close_below": 0.8880, "body_ratio_min": 0.6}]},
         "candle_reaction": ["Nến H1 đóng cửa thủng hỗ trợ thân đặc"]
       },
       "action": "CLOSE_ALL",
@@ -250,7 +263,7 @@ Schema logic (JSON-like). Implement sau có thể dùng Pydantic / typed dict.
 {
   "wake_id": "uuid",
   "symbol": "AUDCAD|ALL",
-  "case": "C1|C2|C3|POST_EXEC|BOSS_EXIT",
+  "case": "C0|C1|C2|C3|POST_EXEC|BOSS_EXIT",
   "next_wake_at": "ISO-8601",
   "interval_seconds": 1800,
   "reason": "H1_elapsed_ge_30m|dynamic_volatile|..."
@@ -349,7 +362,8 @@ Khi LLM khôi phục:
 - `action=ENTRY` / OPEN_* chỉ khi `pair_state=FLAT`.
 - Enqueue chỉ sau HardPass ∧ B.APPROVE.
 - **ALL-LLM:** MỌI action (kể cả DCA NORMAL, WAIT) phải qua A+B consensus. Engine KHÔNG tự enqueue.
-- **SYSTEM_FREEZE:** Khi `freeze=true`, mọi enqueue bị chặn — chỉ Boss can thiệp thủ công.
+- **Ngoại lệ DEC-10:** Trigger `INVALIDATION` của Plan Chốt đã COMMITTED được phép deterministic auto-execute (consent đã ký lúc commit) — vẫn qua HardValidator + Executor.
+- **SYSTEM_FREEZE:** Khi `freeze=true`, mọi enqueue *quyết định mới* bị chặn — chỉ Boss can thiệp thủ công. **Ngoại lệ:** nhánh INVALIDATION của Plan Chốt vẫn chạy (DEC-10).
 
 ## 10. UncertaintyEscalation (Agent A hoặc B → Orchestrator → Telegram → Boss)
 

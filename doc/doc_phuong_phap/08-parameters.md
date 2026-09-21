@@ -161,3 +161,25 @@ LlmContextMinConf ∈ (0, 1]
 | `InpTelegramLanguage` | string | `vi` | Ngôn ngữ tin nhắn Telegram |
 
 > **Không có** `MaxEscalationsPerDay` hay `MinEscalationInterval` — Agent mơ hồ thì cứ hỏi, không giới hạn tần suất.
+
+## 11. Kiến trúc v2.x — Scheduler & Plan Lifecycle (single-source registry)
+
+> File này là **bảng registry duy nhất** cho toàn bộ tham số. `doc_agents/05-scheduler-wakeup.md` §10 và `12-operations-reliability.md` §5 chỉ mô tả ngữ nghĩa — giá trị chuẩn tra ở đây.
+
+| ID tham số | Kiểu | Default | Mô tả |
+|------------|------|---------|--------|
+| `InpFlatWakeOnH1Close` | bool | `true` | C0: bắt buộc thức đúng H1 close khi FLAT (ADR-005) |
+| `InpFlatWakeAfterMidMin` | int | `30` | C1: wake bổ sung +30m sau mốc |
+| `InpH1MidOffsetMin` | int | `30` | C2: wake tại H1_open+30 |
+| `InpWakeMinSeconds` | int | `180` | Sàn interval C3 (3 phút) |
+| `InpWakeMaxSeconds` | int | `3600` | Trần interval C3 (60 phút) |
+| `InpMaxDebateRounds` | int | `2` | Số vòng reconcile tối đa / cycle |
+| `InpLlmTimeoutMs` | int | `30000` | Timeout 1 LLM call |
+| `InpLlmRetries` | int | `3` | Retry trước khi SYSTEM_FREEZE |
+| `InpPlanTtlDays` | int | `7` | DEC-16: plan ACTIVE quá hạn → bắt buộc replan (`expires_at = created_at + TTL`) |
+| `InpDeltaLatestBars` | int | `3` | DEC-11: số nến đóng trong `latest_bars` của DeltaSnapshot |
+| `InpStandbyFallbackTimerMin` | int | `30` | STANDBY.params fallback_timer mặc định |
+| `InpEnforceTopLessons` | bool | `false` | DEC-18: HardValidator reject plan trùng AVOID severity≥ngưỡng |
+| `InpMemoryPackMaxTokens` | int | `500` | Trần MemoryPack inject prompt |
+
+**Validation bổ sung:** `WakeMinSeconds >= 60 AND WakeMaxSeconds <= 7200 AND WakeMinSeconds < WakeMaxSeconds`; `PlanTtlDays >= 1`; `DeltaLatestBars >= 3`.

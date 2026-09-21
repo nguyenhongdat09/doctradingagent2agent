@@ -1,6 +1,6 @@
 # 11 - KÊNH THAM VẤN CỦA BOSS (BOSS CHANNEL - ADVISORY ONLY)
 
-> **File sơ đồ Mermaid tương ứng**: [11-boss-channel.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/11-boss-channel.mmd)
+> **File sơ đồ Mermaid tương ứng**: [11-boss-channel.mmd](11-boss-channel.mmd)
 
 ---
 

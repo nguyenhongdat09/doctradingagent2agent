@@ -57,7 +57,7 @@ Bạn không làm việc theo các case cứng nhắc bị giới hạn. Bạn s
 - KHÔNG gọi OrderSend — chỉ dùng enqueue_order() sau consensus
 - KHÔNG bỏ qua MemoryPack
 - KHÔNG hành động khi SYSTEM_FREEZE = true
-- Debate với Agent B tối đa 2 vòng / cycle
+- Debate với Agent B tối đa `InpMaxDebateRounds` vòng / cycle (mặc định 2)
 
 ## KHI MƠ HỒ (UNCERTAINTY ESCALATION)
 Nếu bạn KHÔNG TỰ TIN (uncertainty_score > 0.6) về quyết định do:
@@ -68,7 +68,8 @@ Nếu bạn KHÔNG TỰ TIN (uncertainty_score > 0.6) về quyết định do:
 - RECOVERY rủi ro cao (lot đã lớn, không rõ nên tiếp DCA hay chờ)
 
 → Gọi tool `escalate_to_boss(category, question, context_summary, analysis_so_far)`
-→ Đợi boss_response (tối đa 30 phút)
+→ Ticket được park ASYNC (DEC-15): cycle không block, scheduler vẫn xử lý C0/C3;
+  khi Boss reply (≤30') hoặc timeout → inject response vào context lần chạy kế
 → Nếu Boss reply: BẮT BUỘC TUÂN LỆNH BOSS. Nếu Boss từ chối phân tích, bác bỏ đề xuất của bạn hoặc yêu cầu WAIT/HỦY/THAY ĐỔI, bạn phải lập tức tuân theo chỉ đạo của Boss. Tuyệt đối KHÔNG ĐƯỢC tự cho là Boss sai rồi làm trái ý Boss.
 → Nếu timeout: Tự quyết theo data hiện có → thông báo Boss đã tự xử
 
@@ -117,7 +118,7 @@ Nếu bạn KHÔNG TỰ TIN khi ballot (VD: A đề xuất action mà bạn khô
 chắc đúng hay sai, evidence hai bên đều có lý):
 
 → Gọi tool `escalate_to_boss(category, question, context_summary, analysis_so_far)`
-→ Đợi boss_response (tối đa 30 phút)
+→ Ticket park ASYNC (DEC-15); khi Boss reply (≤30') hoặc timeout → inject vào lần ballot kế
 → Khi Boss reply: BẮT BUỘC TUÂN LỆNH BOSS. Nếu Boss từ chối kế hoạch của A hoặc yêu cầu WAIT/VETO/HỦY, bạn phải lập tức VETO/REJECT theo lệnh Boss. Tuyệt đối KHÔNG ĐƯỢC tự cho là Boss sai rồi làm trái ý Boss (ví dụ Boss bảo dừng mà bạn lại tự ý APPROVE là cấm).
 → Nếu timeout: Tự ballot theo data hiện có
 
@@ -129,7 +130,9 @@ chắc đúng hay sai, evidence hai bên đều có lý):
 
 ## 3. Output Schema Enforcement
 
-### 3.1 Agent A — TradePlan output
+### 3.1 Agent A — TradePlan + UnifiedContingencyPlan output (v2.x)
+
+Từ kiến trúc v2.x, output của A gồm **2 phần**: `trade_plan` (action tức thời nếu có) và `contingency_plan` (Plan đa kịch bản 4 nhánh — theo schema `04-message-schemas.md` §3b, ghi DB khi COMMITTED). `trade_plan.action = WAIT` khi không có action ngay nhưng vẫn phải sinh `contingency_plan`.
 
 ```json
 {
@@ -154,9 +157,25 @@ chắc đúng hay sai, evidence hai bên đều có lý):
   "risk_assessment": "string — rủi ro đã xem xét",
   "memory_pack_applied": ["bài học nào đã xem xét"],
   "rule_refs": ["matrix:UPTREND×PUSH_DOWN→BUY"],
-  "session_mode": "AUTO|BOSS"
+  "session_mode": "AUTO|BOSS",
+  "contingency_plan": "{UnifiedContingencyPlan — xem 04-message-schemas §3b: scenarios UPSIDE/DOWNSIDE/INVALIDATION/STANDBY, mỗi trigger_condition phải có candle_predicates (DEC-11)}",
+  "lessons_proposed": ["string — tối đa 3 bài học template AVOID|PREFER|WARNING, ≤200 ký tự (DEC-18)"]
 }
 ```
+
+### 3.1b Supervisor Mode — khi đã có Plan Chốt ACTIVE
+
+Khi `active_plan` tồn tại (COMMITTED), prompt A chuyển sang **supervisor mode**: không tái phân tích biểu đồ, chỉ đối chiếu `market_delta` với scenarios của plan (khớp → xác nhận thực thi; không khớp/`prune_hint`/`plan_expired` → soạn Plan Tạm mới). Input chỉ gồm `DeltaMarketSnapshot` + `plan_history_summaries` + `MemoryPack` — KHÔNG có full 30-nến snapshot.
+
+### 3.1c PlanSummarizer output (Orchestrator worker, model siêu nhẹ)
+
+```json
+{
+  "plan_id": "uuid",
+  "summary_text": "2-3 gạch đầu dòng trung lập: đã làm gì / kết quả / lý do — không cảm xúc, không đánh giá chủ quan"
+}
+```
+Fallback khi worker fail (DEC + spec §3.3): `summary_text = concat(execution_notes)` — không để NULL.
 
 ### 3.2 Agent B — ReviewBallot output
 
@@ -198,13 +217,26 @@ Trước khi accept output:
 |---|---|---|
 | System prompt A | ~800 tokens | Nạp 1 lần/session |
 | System prompt B | ~500 tokens | Nạp 1 lần/session |
-| MarketSnapshot | ~1200–1800 tokens | 30 D1 + 30 H1 OHLC + features |
+| MarketSnapshot | ~1200–1800 tokens | 30 D1 + 30 H1 OHLC + features — **chỉ planning cycle** |
+| DeltaMarketSnapshot | ~300–600 tokens | Active plan + ≥3 nến + positions — **monitoring/fast-consensus** |
 | MemoryPack | ≤500 tokens | 2-tier (T1 + T2) |
-| Agent A output | ~300–500 tokens | TradePlan JSON |
+| Agent A output | ~300–500 tokens | TradePlan + ContingencyPlan JSON |
 | Agent B output | ~200–400 tokens | ReviewBallot JSON |
-| **Total per cycle (A+B)** | **~3500–5500 tokens** | Input + output |
+| PlanSummarizer | ~200–300 tokens | Chỉ khi plan DONE, model siêu nhẹ |
+| **Total planning cycle (A+B)** | **~3500–5500 tokens** | Khi lập/replan Plan Chốt |
+| **Total fast-consensus** | **~800–1500 tokens** | UPSIDE/DOWNSIDE trigger khớp (DEC-10) |
+| **Total monitoring/STANDBY** | **~0 tokens** | Engine deterministic check |
 
-### Cost estimate (ALL-LLM)
+### Cost estimate theo 3 loại cycle (v2.x, ALL-LLM + trigger)
+
+| Loại wake | LLM call? | Token/cycle | Tần suất điển hình |
+|---|---|---|---|
+| STANDBY / không khớp trigger | Không | 0 | Phần lớn wake C3 |
+| INVALIDATION khớp | Không (deterministic, DEC-10) | 0 | Hiếm |
+| UPSIDE/DOWNSIDE khớp | Fast Consensus A+B | ~800–1,500 | Vài lần/ngày |
+| Planning / replan / pruning | Full A+B ≤`InpMaxDebateRounds` vòng | ~3,500–5,500 | Khi cần plan mới |
+
+**Lưu ý:** con số "tiết kiệm 70–80%" chỉ đạt khi phần lớn wake là monitoring. Estimate cũ (~192–768 calls/ngày, DEC-01-NEW) giảm mạnh nhờ monitoring cycle không gọi LLM — nhưng mỗi trigger UPSIDE/DOWNSIDE vẫn tốn fast-consensus + 1 planning round ở wake kế.
 
 | Phase | Calls/ngày/cặp | 4 cặp/ngày | Cost (DeepSeek-V3) | Cost (GPT-4o-mini) |
 |---|---|---|---|---|
@@ -266,4 +298,4 @@ function call_llm_with_retry(prompt, schema, max_retries=2):
 - Autonomy: [10-autonomy-constraints.md](10-autonomy-constraints.md)
 - Message schemas: [04-message-schemas.md](04-message-schemas.md)
 - Operations: [../doc_phuong_phap/12-operations-reliability.md](../doc_phuong_phap/12-operations-reliability.md)
-- ERRATA: [../ERRATA.md](../ERRATA.md) DEC-01-NEW, DEC-08
+- ERRATA: [../ERRATA.md](../ERRATA.md) DEC-01-NEW, DEC-08, DEC-10..18

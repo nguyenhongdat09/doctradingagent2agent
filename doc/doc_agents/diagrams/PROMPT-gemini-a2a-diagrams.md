@@ -17,7 +17,7 @@ CHỈ xuất mã Mermaid hợp lệ. Không giải thích dài. Không viết co
 ```
 Đọc 06-entry-flow.md, 03-consensus-protocol.md, 13-experience-loop.md.
 sequenceDiagram: wake → get_memory_pack → A plan → HV → B ballot
-→ challenge ≤2 → A INSERT MarketOrderInfo PENDING → Executor claim OrderSend MT5
+→ challenge ≤InpMaxDebateRounds → A INSERT MarketOrderInfo PENDING → Executor claim OrderSend MT5
 → Archive/FAILED → WakeRequest C3 hoặc DEFER C1/C2.
 Output ONLY sequenceDiagram.
 ```

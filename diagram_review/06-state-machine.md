@@ -1,6 +1,6 @@
 # 06 - MÁY TRẠNG THÁI QUẢN TRỊ RỦI RO (STATE MACHINE)
 
-> **File sơ đồ Mermaid tương ứng**: [06-state-machine.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/06-state-machine.mmd)
+> **File sơ đồ Mermaid tương ứng**: [06-state-machine.mmd](06-state-machine.mmd)
 
 ---
 

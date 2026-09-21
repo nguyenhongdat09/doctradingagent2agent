@@ -1,6 +1,6 @@
 # 05 - HÀNG ĐỢI LỆNH & WORKER THỰC THI (QUEUE & EXECUTOR)
 
-> **File sơ đồ Mermaid tương ứng**: [05-queue-executor.mmd](file:///d:/TradingAgents/PlanToCode/diagram_review/05-queue-executor.mmd)
+> **File sơ đồ Mermaid tương ứng**: [05-queue-executor.mmd](05-queue-executor.mmd)
 
 ---
 

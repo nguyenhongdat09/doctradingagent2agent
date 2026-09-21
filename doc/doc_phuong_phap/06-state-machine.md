@@ -1,6 +1,8 @@
 # 06 — Pair State Machine
 
 > **NGUYÊN TẮC BẤT BIẾN (ALL-LLM):** Mọi action thay đổi vị thế (ENTRY, DCA, RECOVERY_DCA, PAYOFF_REDUCE, CLOSE_ALL, PARTIAL_CLOSE) **BẮT BUỘC** qua Agent A đề xuất + Agent B phản biện → consensus → HardValidator → enqueue. Engine (mắt) chỉ cung cấp dữ liệu (spacing, ladder, snapshot). **Không có rule cứng tự động ra lệnh.**
+>
+> **Ngoại lệ duy nhất (DEC-10):** trigger `INVALIDATION` của Plan Chốt đã COMMITTED được thực thi deterministic (consent đã ký lúc commit plan) — chạy cả khi `SYSTEM_FREEZE`, vẫn qua HardValidator + Executor.
 
 ## 1. Tổng quan
 
@@ -41,6 +43,8 @@ Diagram nguồn: [diagrams/D02-pair-state-machine.mmd](diagrams/D02-pair-state-m
 ## 4. FLAT — chi tiết
 
 ### 4.1 Hành vi mỗi H1 close
+
+> **v2.x:** pseudocode dưới chạy bên trong mô hình Plan Chốt — nếu đã có `contingency_plans` COMMITTED/ACTIVE thì wake chỉ check trigger (xem `../UPGRADE_CONTINGENCY_PLAN_SPEC.md` §6); block này mô tả *decision content* khi agents lập/replan.
 
 ```
 1. Nếu KillSwitch → WAIT

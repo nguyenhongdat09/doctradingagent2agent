@@ -28,11 +28,11 @@
   - **Ghi nhận chi phí token bắt buộc:** Mọi lượt gọi LLM đều gọi `llm_runs_repo.log_run()` để ghi lại `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd`, `latency_ms` vào bảng `LLMRuns`.
 
 ### Module 3.2: Agent A — Planner (`src/agents/agent_a/`)
-- **`prompts.py`:** Lưu trữ System Prompt và Template prompt cho Agent A (Xem [14-llm-prompt-spec.md](../doc_agents/14-llm-prompt-spec.md)).
+- **`prompts.py`:** Lưu trữ System Prompt và Template prompt cho Agent A (Xem [14-llm-prompt-spec.md](../doc_agents/14-llm-prompt-spec.md) — gồm 2 mode: **planning** khi chưa có plan / cần replan, và **supervisor** khi đã có Plan Chốt ACTIVE).
 - **`planner.py`:** Logic phân tích của Agent A:
-  - Nhận `MarketSnapshot` và chuỗi `MemoryPack`.
-  - Phân tích toàn diện: Cấu trúc D1, Strength Score H1, cờ `spacing_met`, bài học `AVOID`/`PREFER`.
-  - Soạn thảo `TradePlan` với đầy đủ luận điểm `reasoning` và đánh giá rủi ro `risk_assessment`.
+  - **Planning mode:** Nhận `MarketSnapshot` (full 30+30 nến) + `MemoryPack` + `plan_history_summaries`. Phân tích toàn diện: Cấu trúc D1, Strength Score H1, cờ `spacing_met`, bài học `AVOID`/`PREFER`.
+  - **Supervisor mode:** Chỉ nhận `DeltaMarketSnapshot` (active_plan + latest_bars + positions) — CẤM tái phân tích biểu đồ từ đầu.
+  - Output kép (v2.x): `TradePlan` (action tức thời) + **`UnifiedContingencyPlan` 4 nhánh** (UPSIDE/DOWNSIDE/INVALIDATION/STANDBY, mỗi trigger kèm `candle_predicates` máy-đọc — DEC-11) + `lessons_proposed[]` (DEC-18).
 
 ### Module 3.3: Agent B — Independent Challenger (`src/agents/agent_b/`)
 - **`prompts.py`:** Lưu trữ System Prompt và Anti-sycophancy Prompt cho Agent B.
@@ -46,16 +46,17 @@
 
 ### Module 3.4: Consensus Engine & Debate Loop (`src/agents/consensus.py`)
 - **Nhiệm vụ:**
-  - Điều phối vòng tranh luận giữa Agent A và Agent B (Tối đa 2 vòng: $Round \le 2$):
-    1. **Vòng 1:** A gửi `TradePlan` $\rightarrow$ B thẩm định `ReviewBallot`.
-    2. Nếu B trả về `CHALLENGE` và $Round < 2$:
-       - A nhận phản biện $\rightarrow$ Điều chỉnh kế hoạch $\rightarrow$ Gửi lại `TradePlan_v2`.
+  - Điều phối vòng tranh luận giữa Agent A và Agent B (Tối đa `InpMaxDebateRounds` vòng — mặc định $Round \le 2$, đọc từ `doc_phuong_phap/08-parameters.md`, không hardcode):
+    1. **Vòng 1:** A gửi `TradePlan` + `UnifiedContingencyPlan` (`PROVISIONAL`) $\rightarrow$ B thẩm định `ReviewBallot`.
+    2. Nếu B trả về `CHALLENGE`/`VETO` và $Round < InpMaxDebateRounds$ — **B bắt buộc kèm `counter_plan`** (không cho phép từ chối khống, spec §3.5):
+       - A nhận `counter_plan` của B $\rightarrow$ hòa giải mốc giá/điều kiện nến $\rightarrow$ Gửi `ReconciledPlan` (`PROVISIONAL` v2).
        - B thẩm định lại $\rightarrow$ Ra `ReviewBallot_v2`.
     3. **Kết luận đồng thuận:**
        - Nếu $B.decision == 'APPROVE'$:
-         - Chạy `HardValidator.validate(plan)`.
-         - Nếu `PASS` $\rightarrow$ Đạt đồng thuận (`CONSENSUS_AUTO`) $\rightarrow$ Agent A gọi `market_order_repo.insert_pending()`.
-       - Nếu B trả về `VETO` hoặc hết 2 vòng vẫn bất đồng $\rightarrow$ Kết luận `DEFER` $\rightarrow$ Không ghi lệnh, đặt lịch wake tiếp theo.
+         - Plan Tạm $\rightarrow$ **Plan Chốt**: `plan_state='COMMITTED'`, `plan_status='ACTIVE'`, `is_active=TRUE`, `expires_at = now + PlanTtlDays` → `contingency_plan_repo.commit_plan()` (transaction: plan cũ → `SUPERSEDED` nếu có).
+         - Nếu plan có action tức thời: chạy `HardValidator.validate(plan)` → `PASS` → `market_order_repo.insert_pending()`.
+       - Nếu B `VETO` hoặc hết `InpMaxDebateRounds` vòng bất đồng → `DEFER`: vẫn phải lưu **fallback plan COMMITTED tối thiểu STANDBY + kế thừa INVALIDATION của plan trước** (DEC-13).
+  - **Fast Consensus (DEC-10):** khi PreTriggerFilter khớp nhánh UPSIDE/DOWNSIDE của Plan Chốt → 1 vòng A→B xác nhận "khớp đúng cam kết" (không phân tích lại). INVALIDATION không qua hàm này — engine auto-execute.
 
 ### Module 3.5: Boss Channel & Interrupt Protocol (`src/agents/boss/`)
 - **`boss_channel.py`:** Quản lý phiên thảo luận 3 bên giữa Agent A, Agent B và Boss khi có sự kiện `BossWake`.
@@ -70,7 +71,7 @@
 
 - **`src/agents/escalation.py` — EscalationManager:**
   - `create_and_send(agent, symbol, category, question, context, analysis)` → INSERT `EscalationTickets` + gửi Telegram.
-  - `wait_for_response(ticket_id, timeout=1800)` → Đợi Boss reply (poll DB / event), tối đa 30 phút.
+  - **Async (DEC-15):** ticket park `WAITING` — scheduler không block, C0/C3 vẫn chạy; `BossAdvisory`/timeout inject vào cycle kế. Không dùng blocking wait trong main loop.
   - `self_resolve(ticket_id, resolution, reasoning)` → UPDATE status=`SELF_RESOLVED` + thông báo Boss.
   - `handle_late_response(ticket_id, boss_response)` → Ghi `late_boss_response` + nhắn Boss "đã tự quyết theo giải pháp ABC".
 
@@ -88,8 +89,16 @@
   - Xử lý late reply (Boss reply sau 30 phút timeout).
 
 - **Tool `escalate_to_boss` cho Agent A & Agent B:**
-  - Agent gọi → `EscalationManager.create_and_send()` → đợi → return `BossAdvisory` hoặc `TimeoutSignal`.
+  - Agent gọi → `EscalationManager.create_and_send()` → ticket park; agent tiếp tục/đánh dấu pending → khi reply hoặc timeout → inject `BossAdvisory`/`TimeoutSignal` vào context lần chạy kế (async, DEC-15).
   - **Quy tắc Tuân thủ Mệnh lệnh (Boss Directive):** Agent nhận response của Boss như một chỉ thị bắt buộc. Nếu Boss từ chối phân tích, bác bỏ đề xuất hoặc yêu cầu WAIT/HỦY/DỪNG, cả Agent A và B **BẮT BUỘC TUÂN THỦ 100%**, tuyệt đối không được tự cho là Boss sai rồi làm trái ý Boss.
+
+### Module 3.7: PlanSummarizer Worker (`src/agents/workers/plan_summarizer.py`) — v2.x
+- **Nhiệm vụ:** AI Worker độc lập (model siêu nhẹ, vd `gpt-4o-mini`/Gemini Flash), do Orchestrator kích hoạt **one-shot** khi `contingency_plans.plan_status` chuyển `DONE`:
+  1. Đọc `unified_plan_json` + `execution_notes` của plan vừa DONE.
+  2. Sinh `summary_text` = 2–3 gạch đầu dòng trung lập (đã làm gì / kết quả / lý do).
+  3. Ghi vào `contingency_plans.summary_text`; log `LLMRuns` với `purpose='plan_summary'`.
+- **Fallback (spec §3.3):** worker fail → `summary_text = concat(execution_notes)` — không để NULL.
+- **Không làm:** không ballot, không phân tích biểu đồ, không ảnh hưởng latency A/B.
 
 ---
 
@@ -97,9 +106,11 @@
 
 - [ ] **LLM Provider Factory:** Tạo factory cho phép chuyển đổi linh hoạt giữa DeepSeek, OpenAI, Anthropic qua config.
 - [ ] **LLMRuns Logging:** Mọi lượt gọi LLM đều được lưu trữ chính xác số token và chi phí vào bảng `LLMRuns`.
-- [ ] **Agent A Planner:** Sinh đúng schema `TradePlan`, có đầy đủ reasoning và risk assessment.
-- [ ] **Agent B Challenger:** Phản biện độc lập, bắt lỗi AVOID, bắt buộc có `counter_evidence` khi APPROVE.
-- [ ] **Consensus Loop:** Dừng đúng sau tối đa 2 vòng khi gặp CHALLENGE; chỉ enqueue khi có APPROVE + HardValidator PASS.
+- [ ] **Agent A Planner:** Sinh đúng schema `TradePlan` **+ `UnifiedContingencyPlan` 4 nhánh** (có `candle_predicates` máy-đọc — DEC-11) + `lessons_proposed[]`, có đầy đủ reasoning và risk assessment.
+- [ ] **Agent B Challenger:** Phản biện độc lập, bắt lỗi AVOID, bắt buộc có `counter_evidence` khi APPROVE **và `counter_plan` khi CHALLENGE/VETO** (không từ chối khống).
+- [ ] **Consensus Loop:** Dừng đúng sau tối đa `InpMaxDebateRounds` vòng (mặc định 2) khi gặp CHALLENGE; chỉ enqueue khi có APPROVE + HardValidator PASS; **mọi cycle kết thúc phải có 1 Plan COMMITTED trong DB** (fallback kế thừa INVALIDATION — DEC-13).
+- [ ] **Plan Lifecycle:** Plan Chốt ghi `is_active=TRUE` + `expires_at`; plan cũ chuyển `SUPERSEDED` trong cùng transaction; unique index chặn 2 plan ACTIVE.
+- [ ] **PlanSummarizer:** Khi plan → DONE, worker sinh `summary_text` ≤3 gạch đầu dòng, log `purpose='plan_summary'`; fail → fallback `execution_notes`.
 - [ ] **Boss Channel:** Boss có thể góp ý nhưng không thể ép hệ thống vào lệnh nếu vi phạm nguyên tắc.
 - [ ] **Escalation Tool:** Agent A/B gọi được `escalate_to_boss`, ticket `EscalationTickets` được tạo đúng schema.
 - [ ] **Telegram Send:** Tin nhắn tiếng Việt format đẹp, đầy đủ thông tin cho Boss ra quyết định.

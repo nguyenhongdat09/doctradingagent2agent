@@ -133,7 +133,9 @@ Cập nhật bảng `contingency_plans` để hỗ trợ đầy đủ 2 trạng 
 ```sql
 ALTER TABLE contingency_plans 
 ADD COLUMN plan_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE'; 
--- Các giá trị chuẩn: 'ACTIVE' (đang chạy/chờ), 'DONE' (đã thực thi xong), 'CANCELLED' (hủy/thay thế)
+-- Enum chuẩn (DEC-17): 'ACTIVE' (đang chạy/chờ), 'DONE' (đã thực thi xong),
+-- 'SUPERSEDED' (bị thay thế bởi plan mới), 'CANCELLED' (hủy).
+-- plan_state (PROVISIONAL|COMMITTED) là trục khác — xem UPGRADE_CONTINGENCY_PLAN_SPEC §5.
 
 ALTER TABLE contingency_plans 
 ADD COLUMN summary_text TEXT NULL;

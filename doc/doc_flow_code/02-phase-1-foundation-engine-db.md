@@ -1,6 +1,6 @@
 # 02 — Phase 1: Nền Tảng Cơ Sở (Database, MT5 Adapter, Engine Mắt, Executor)
 
-> **Mục tiêu Phase 1:** Hoàn thiện toàn bộ hạ tầng cơ khí, cơ sở dữ liệu SQLite (9 bảng chuẩn), hệ thống Repository, các thuật toán trích xuất đặc trưng giá ("đôi mắt" deterministic chia nhỏ theo file), bộ kiểm duyệt an toàn (HardValidator) và luồng thực thi lệnh (Executor Thread).
+> **Mục tiêu Phase 1:** Hoàn thiện toàn bộ hạ tầng cơ khí, cơ sở dữ liệu SQLite (**14 bảng** — 10 vận hành + `MarketSnapshots` + 3 bảng v2.x `macro_cycles`/`micro_cycles`/`contingency_plans`), hệ thống Repository, các thuật toán trích xuất đặc trưng giá ("đôi mắt" deterministic chia nhỏ theo file), bộ kiểm duyệt an toàn (HardValidator) và luồng thực thi lệnh (Executor Thread).
 
 ---
 
@@ -15,21 +15,28 @@
     PRAGMA foreign_keys = ON;
     PRAGMA synchronous = FULL; -- An toàn tuyệt đối chống crash dữ liệu lệnh
     ```
-  - Tự động tạo 9 bảng chuẩn cho từng database instance `data/dca_<symbol>.db`:
+  - Tự động tạo **14 bảng** cho từng database instance `data/dca_<symbol>.db` (DDL chuẩn: `doc_phuong_phap/10-sqlite-design.md` §2 + `UPGRADE_CONTINGENCY_PLAN_SPEC.md` §5):
     1. `MarketOrderInfo`: Hàng đợi lệnh chờ thực thi.
     2. `MarketOrderInfoArchive`: Lịch sử lưu trữ lệnh đã hoàn tất.
     3. `PairState`: Trạng thái rổ và bối cảnh hiện tại của cặp tiền.
     4. `AuditLog`: Nhật ký kiểm toán mọi quyết định.
-    5. `Plans`: Kế hoạch giao dịch do Agent A đề xuất.
+    5. `Plans`: Kế hoạch giao dịch do Agent A đề xuất (audit transcript v1).
     6. `Ballots`: Phiếu thẩm định do Agent B chấm điểm.
     7. `Sessions`: Phiên thảo luận (Scheduled, Intra-bar, Boss).
     8. `Messages`: Tin nhắn chi tiết trong phiên thảo luận.
     9. `LLMRuns`: Ghi nhận chi tiết token, chi phí USD, latency từng cuộc gọi API LLM.
+    10. `EscalationTickets`: Ticket hỏi Boss (uncertainty escalation).
+    11. `MarketSnapshots`: Snapshot lưu vết audit (FK từ EscalationTickets/plans).
+    12. `macro_cycles` **(v2.x):** Chu kỳ tổng — chỉ tạo khi ENTRY đầu fill (DEC-16).
+    13. `micro_cycles` **(v2.x):** Từng bước trigger-check / trao đổi.
+    14. `contingency_plans` **(v2.x):** Unified Contingency Plan đã chốt — `plan_state`/`plan_status`/`is_active`/`expires_at` + partial unique index 1-ACTIVE/macro.
 - **Repositories Riêng Biệt (`src/database/repositories/`):**
   - `market_order_repo.py`: Các hàm `insert_pending()`, `claim_processing_atomic()`, `archive_and_delete_transaction()`, `cancel_orphans()`.
   - `pair_state_repo.py`: Các hàm `get_state()`, `update_state()`, `set_cooldown()`, `update_last_processed_bar()`.
   - `audit_repo.py`: Hàm `log_decision(event_type, plan_id, ballot_id, hard_pass, decision, reason, extra)`.
-  - `llm_runs_repo.py`: Hàm `log_run(run_id, symbol, session_id, caller, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_usd, latency_ms, purpose)`. Quy ước `purpose`: `'memory_pack'` (đo chi phí nạp kinh nghiệm), `'context_analysis'`, `'signal_analysis'`, `'plan'`, `'ballot'`, `'revision'`, `'boss_chat'`.
+  - `llm_runs_repo.py`: Hàm `log_run(run_id, symbol, session_id, caller, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_usd, latency_ms, purpose)`. Quy ước `purpose`: `'memory_pack'` (đo chi phí nạp kinh nghiệm), `'context_analysis'`, `'signal_analysis'`, `'plan'`, `'ballot'`, `'revision'`, `'boss_chat'`, `'plan_summary'`.
+  - `contingency_plan_repo.py` **(v2.x):** `get_active_plan(macro_cycle_id)`, `commit_plan()`, `mark_done(plan_id, notes)`, `mark_superseded(plan_id)`, `get_plan_summaries(macro_cycle_id)` — mọi ghi chuyển trạng thái đều trong transaction kèm unactivate plan cũ.
+  - `cycle_repo.py` **(v2.x):** `open_macro_cycle()` (chỉ khi ENTRY fill), `close_macro_cycle()`, `append_micro_cycle()`.
 
 ### Module 1.2: MT5 Adapter (`src/engine/data/mt5_adapter.py`)
 - **Nhiệm vụ:**
@@ -97,7 +104,7 @@ Tách thành 3 file nhỏ:
 
 ## ✅ 2. Checklist Developer — Phase 1
 
-- [ ] **DB Setup:** Khởi tạo thành công database SQLite với PRAGMA WAL và `synchronous = FULL`, đủ 9 bảng (kèm `LLMRuns`).
+- [ ] **DB Setup:** Khởi tạo thành công database SQLite với PRAGMA WAL và `synchronous = FULL`, đủ **14 bảng** (kèm `LLMRuns`, `EscalationTickets`, `MarketSnapshots`, `macro_cycles`, `micro_cycles`, `contingency_plans` + unique index 1-ACTIVE-plan).
 - [ ] **Repositories:** Viết đầy đủ unit test cho các hàm trong `src/database/repositories/`.
 - [ ] **MT5 Wrapper:** Kết nối thành công MT5 demo, lấy đúng nến đã đóng (`shift >= 1`), gắn đúng comment format.
 - [ ] **StructureEngine:** Test phát hiện chính xác Swing D1 ($r=3$), BOS, Range Compress, Hysteresis không repaint.
